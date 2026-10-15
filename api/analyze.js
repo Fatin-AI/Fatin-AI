@@ -4,14 +4,15 @@ export default async function handler(req, res) {
   }
 
   const { contractText } = req.body;
-  const apiKey = process.env.GEMINI_API_KEY;
+  const token = process.env.GEMINI_API_KEY; // هنا تحط توكن الـ AQ. في فريبل Vercel
+  const projectId = process.env.GCP_PROJECT_ID; // معرف مشروع جوجل كلود
 
   if (!contractText) {
     return res.status(400).json({ error: 'نص العقد مفقود' });
   }
 
-  if (!apiKey) {
-    return res.status(500).json({ error: 'مفتاح الـ API غير معرف في Vercel.' });
+  if (!token || !projectId) {
+    return res.status(500).json({ error: 'تأكد من إضافة توكن AQ ومعرف المشروع (GCP_PROJECT_ID) في إعدادات Vercel.' });
   }
 
   const systemPrompt = `أنت مستشار قانوني سعودي خبير في نظام العمل السعودي ولائحته التنفيذية. 
@@ -30,42 +31,38 @@ export default async function handler(req, res) {
 }`;
 
   try {
-    // جلب قائمة النماذج المتاحة للمفتاح أو استخدام gemini-2.5-flash / gemini-2.0-flash
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
+    // رابط Vertex AI الرسمي الذي يدعم توكنات AQ. (يتطلب Project ID)
+    const url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${projectId}/locations/us-central1/publishers/google/models/gemini-1.5-flash:generateContent`;
     
-    let response = await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.trim()}`
+      },
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\n[نص العقد المراد فحصه]:\n" + contractText }] }],
-        generationConfig: { responseMimeType: "application/json" }
+        contents: [{
+          role: 'user',
+          parts: [{ text: systemPrompt + "\n\n[نص العقد المراد فحصه]:\n" + contractText }]
+        }],
+        generationConfig: {
+          temperature: 0.2
+        }
       })
     });
 
-    let data = await response.json();
-
-    // في حال عدم توفر 2.5 جرب v1 المباشر مع gemini-1.5-flash
-    if (data.error) {
-      const fallbackUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`;
-      response = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\n[نص العقد المراد فحصه]:\n" + contractText }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
-      data = await response.json();
-    }
-
+    const data = await response.json();
     if (data.error) {
       throw new Error(data.error.message);
     }
 
     const rawText = data.candidates[0].content.parts[0].text;
-    const result = JSON.parse(rawText);
+    // تنظيف الـ JSON في حال وجود علامات تخزين إضافية
+    const cleanJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const result = JSON.parse(cleanJson);
+    
     return res.status(200).json(result);
   } catch (err) {
-    return res.status(500).json({ error: "خطأ من الذكاء الاصطناعي: " + err.message });
+    return res.status(500).json({ error: "خطأ Vertex AI: " + err.message });
   }
 }
