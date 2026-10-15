@@ -3,197 +3,786 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>فطن AI - تدقيق عقود العمل الذكي</title>
+  <title>فطن AI | المدقق القانوني الذكي</title>
+  <meta name="description" content="فطن AI - مساعد ذكي لتحليل عقود العمل ومراجعتها وفق الأنظمة السعودية.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700&display=swap" rel="stylesheet">
-  <!-- مكتبة قراءة ملفات الـ PDF مباشرة من المتصفح -->
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
       --bg: #0b0f19;
-      --card-bg: rgba(23, 31, 48, 0.7);
+      --card: #151c2b;
       --gold: #d4af37;
-      --gold-hover: #b59226;
+      --gold2: #f0d477;
       --text: #f3f4f6;
-      --subtext: #9ca3af;
-      --border: rgba(212, 175, 55, 0.2);
+      --muted: #a0a8b8;
+      --border: rgba(212,175,55,.22);
+      --green: #4ade80;
+      --red: #f87171;
+      --blue: #93c5fd;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Sans Arabic', sans-serif; }
-    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; background-image: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.15) 0%, transparent 70%); }
-    .header { text-align: center; margin-bottom: 25px; }
-    .logo-container { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 10px; }
-    .logo-icon { background: linear-gradient(135deg, var(--gold), #8a6d1c); width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 22px; color: #000; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3); }
-    h1 { font-size: 28px; font-weight: 700; color: #fff; }
-    p.subtitle { color: var(--subtext); font-size: 14px; margin-top: 5px; }
-    .badge { display: inline-block; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border); color: var(--gold); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-top: 10px; }
-    .main-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 650px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-    .input-group { margin-bottom: 20px; text-align: right; }
-    label { display: block; color: var(--gold); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-    
-    /* تصميم زر رفع الملفات */
-    .file-dropzone { border: 2px dashed rgba(212, 175, 55, 0.4); background: rgba(11, 15, 25, 0.5); padding: 25px; border-radius: 12px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 15px; }
-    .file-dropzone:hover { border-color: var(--gold); background: rgba(212, 175, 55, 0.05); }
-    .file-dropzone p { color: var(--subtext); font-size: 14px; margin-top: 5px; }
-    .file-dropzone input { display: none; }
-    #fileNameDisplay { color: var(--gold); font-size: 13px; margin-top: 8px; font-weight: 600; }
-
-    textarea { width: 100%; height: 130px; background: rgba(11, 15, 25, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; color: #fff; font-size: 14px; line-height: 1.6; resize: vertical; }
-    textarea:focus { outline: none; border-color: var(--gold); }
-    
-    .btn { width: 100%; background: linear-gradient(135deg, var(--gold), #a37f20); color: #000; font-weight: 700; font-size: 16px; border: none; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 20px rgba(212, 175, 55, 0.25); display: flex; align-items: center; justify-content: center; gap: 10px; }
-    .btn:hover { background: linear-gradient(135deg, #e5be44, var(--gold)); transform: translateY(-2px); }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-    
-    #resultContainer { margin-top: 30px; text-align: right; display: none; }
-    .status-badge { display: inline-block; padding: 6px 16px; border-radius: 8px; font-weight: bold; font-size: 14px; margin-bottom: 15px; }
-    .status-legal { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
-    .status-illegal { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-    .summary-box { background: rgba(255,255,255,0.03); border-right: 3px solid var(--gold); padding: 15px; border-radius: 0 10px 10px 0; margin-bottom: 20px; font-size: 14px; color: #e5e7eb; }
-    .violation-card { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 18px; margin-bottom: 15px; }
-    .violation-title { color: #f87171; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
-    .violation-desc { color: #d1d5db; font-size: 13px; margin-bottom: 10px; line-height: 1.5; }
-    .violation-article { font-size: 12px; color: var(--gold); background: rgba(212, 175, 55, 0.1); padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
-    .violation-fix { background: rgba(34, 197, 94, 0.08); border-right: 2px solid #22c55e; padding: 10px; border-radius: 0 6px 6px 0; font-size: 13px; color: #86efac; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'IBM Plex Sans Arabic', sans-serif;
+    }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at top, rgba(212,175,55,.12), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      padding: 28px 16px 50px;
+    }
+    .container {
+      width: 100%;
+      max-width: 850px;
+      margin: auto;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .logo-icon {
+      width: 54px;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, var(--gold2), #9b7619);
+      color: #111;
+      border-radius: 15px;
+      font-size: 29px;
+      font-weight: 700;
+      box-shadow: 0 5px 25px rgba(212,175,55,.2);
+    }
+    h1 {
+      font-size: 34px;
+      font-weight: 700;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 14px;
+      padding: 6px 13px;
+      border: 1px solid var(--border);
+      color: var(--gold2);
+      background: rgba(212,175,55,.07);
+      border-radius: 25px;
+      font-size: 12px;
+    }
+    .card {
+      background: rgba(21,28,43,.94);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 15px 50px rgba(0,0,0,.28);
+      margin-bottom: 20px;
+    }
+    .section-title {
+      color: var(--gold2);
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 15px;
+    }
+    .dropzone {
+      border: 2px dashed rgba(212,175,55,.4);
+      border-radius: 15px;
+      background: rgba(11,15,25,.55);
+      padding: 30px 18px;
+      text-align: center;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: var(--gold);
+      background: rgba(212,175,55,.06);
+    }
+    .upload-icon {
+      font-size: 35px;
+      margin-bottom: 8px;
+    }
+    .dropzone strong {
+      display: block;
+      font-size: 15px;
+    }
+    .dropzone p {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    #contractFile {
+      display: none;
+    }
+    .file-info {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(212,175,55,.07);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--gold2);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    .file-info button {
+      margin-right: 8px;
+      background: transparent;
+      border: 0;
+      color: var(--red);
+      cursor: pointer;
+    }
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 22px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .divider::before,
+    .divider::after {
+      content: "";
+      height: 1px;
+      background: rgba(255,255,255,.1);
+      flex: 1;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 9px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      padding: 15px;
+      border: 1px solid rgba(255,255,255,.13);
+      border-radius: 12px;
+      background: rgba(11,15,25,.7);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.9;
+      outline: none;
+    }
+    textarea:focus {
+      border-color: var(--gold);
+    }
+    .help {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+      line-height: 1.8;
+    }
+    .btn {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 15px 18px;
+      margin-top: 20px;
+      background: linear-gradient(135deg, var(--gold2), #ad8520);
+      color: #111;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      filter: brightness(1.07);
+    }
+    .btn:disabled {
+      opacity: .6;
+      cursor: wait;
+    }
+    .secondary-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--gold2);
+      padding: 9px 14px;
+      border-radius: 9px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .progress-wrap {
+      display: none;
+      margin-top: 18px;
+    }
+    .progress-message {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 9px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(255,255,255,.08);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 35%;
+      background: var(--gold);
+      border-radius: 10px;
+      animation: loading 1.2s infinite alternate ease-in-out;
+    }
+    @keyframes loading {
+      from { width: 12%; }
+      to { width: 90%; }
+    }
+    .notice {
+      display: none;
+      padding: 13px;
+      margin-top: 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.8;
+      overflow-wrap: anywhere;
+    }
+    .notice.error {
+      display: block;
+      color: #fecaca;
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.25);
+    }
+    .notice.success {
+      display: block;
+      color: #bbf7d0;
+      background: rgba(34,197,94,.08);
+      border: 1px solid rgba(34,197,94,.2);
+    }
+    #resultContainer {
+      display: none;
+    }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .result-header h2 {
+      font-size: 20px;
+    }
+    .status {
+      display: inline-block;
+      padding: 7px 13px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .status.legal {
+      color: var(--green);
+      background: rgba(34,197,94,.1);
+      border: 1px solid rgba(34,197,94,.25);
+    }
+    .status.illegal {
+      color: var(--red);
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.25);
+    }
+    .status.review {
+      color: var(--blue);
+      background: rgba(59,130,246,.1);
+      border: 1px solid rgba(59,130,246,.25);
+    }
+    .summary {
+      border-right: 3px solid var(--gold);
+      background: rgba(255,255,255,.035);
+      padding: 17px;
+      border-radius: 0 10px 10px 0;
+      line-height: 2;
+      font-size: 14px;
+      margin-bottom: 22px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .violations-heading {
+      font-size: 16px;
+      margin-bottom: 14px;
+    }
+    .violation {
+      background: rgba(0,0,0,.18);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 13px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+    .violation h3 {
+      color: #fca5a5;
+      font-size: 15px;
+      margin-bottom: 10px;
+    }
+    .field {
+      margin-top: 12px;
+      line-height: 1.9;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    .field-label {
+      display: block;
+      color: var(--gold2);
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+    .fix {
+      padding: 12px;
+      background: rgba(34,197,94,.06);
+      border-right: 2px solid var(--green);
+      border-radius: 0 8px 8px 0;
+      color: #bbf7d0;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 20px;
+      border-radius: 10px;
+      color: var(--green);
+      background: rgba(34,197,94,.06);
+      line-height: 1.9;
+    }
+    .legal-disclaimer {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.9;
+      margin-top: 20px;
+      padding-top: 15px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+    footer {
+      text-align: center;
+      color: #7e8797;
+      font-size: 12px;
+      margin-top: 25px;
+      line-height: 1.9;
+    }
+    @media (max-width: 600px) {
+      body {
+        padding: 20px 12px 35px;
+      }
+      .card {
+        padding: 19px;
+      }
+      h1 {
+        font-size: 28px;
+      }
+      .result-header {
+        align-items: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
-
-  <div class="header">
-    <div class="logo-container">
-      <div class="logo-icon">ف</div>
-      <h1>فطن AI</h1>
-    </div>
-    <p class="subtitle">مدقق عقود العمل الذكي المعتمد - نظام العمل السعودي</p>
-    <div class="badge">⚖️ دعم كامل لقراءة ملفات الـ PDF والنصوص</div>
-  </div>
-
-  <div class="main-card">
-    <div class="input-group">
-      <label>رفع ملف العقد (PDF أو TXT) أو اللصق اليدوي:</label>
-      
-      <!-- منطقة رفع الملفات -->
-      <div class="file-dropzone" onclick="document.getElementById('contractFile').click()">
-        <span style="font-size: 28px;">📄</span>
-        <p>اضغط هنا لاختيار ملف العقد (PDF)</p>
-        <input type="file" id="contractFile" accept=".pdf,.txt" onchange="handleFileSelect(event)">
-        <div id="fileNameDisplay"></div>
+  <main class="container">
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">ف</div>
+        <div>
+          <h1>فطن AI</h1>
+          <p class="subtitle">المدقق القانوني الذكي</p>
+        </div>
       </div>
-
-      <textarea id="contractInput" placeholder="أو الصق بنود عقد العمل هنا مباشرة للفحص الآلي..."></textarea>
-    </div>
-
-    <button id="analyzeBtn" class="btn" onclick="analyzeContract()">
-      <span>بدء الفحص والتطابق الآلي</span>
-    </button>
-
-    <div id="resultContainer">
-      <div id="statusBadge" class="status-badge"></div>
-      <div id="summaryText" class="summary-box"></div>
+      <div class="badge">⚖️ مساعد ذكي لمراجعة عقود العمل السعودية</div>
+    </header>
+    <section class="card">
+      <h2 class="section-title">ابدأ بمراجعة عقدك</h2>
+      <div
+        id="dropzone"
+        class="dropzone"
+        role="button"
+        tabindex="0"
+        aria-label="اختيار ملف العقد"
+      >
+        <div class="upload-icon">📄</div>
+        <strong>اضغط لاختيار ملف العقد أو اسحبه إلى هنا</strong>
+        <p>يدعم ملفات PDF وTXT — يفضل ألا يتجاوز الملف 15 ميجابايت</p>
+        <input type="file" id="contractFile" accept=".pdf,.txt,application/pdf,text/plain">
+      </div>
+      <div id="fileInfo" class="file-info">
+        <span id="fileName"></span>
+        <button type="button" id="removeFileBtn">إزالة الملف</button>
+      </div>
+      <div id="fileNotice" class="notice" role="status" aria-live="polite"></div>
+      <div class="divider">أو أدخل نص العقد يدويًا</div>
+      <label for="contractInput">نص العقد</label>
+      <textarea
+        id="contractInput"
+        placeholder="الصق نص عقد العمل هنا، أو ارفع ملف PDF أعلاه..."
+      ></textarea>
+      <p class="help">
+        يمكنك مراجعة النص المستخرج من الملف قبل بدء التحليل.
+        إذا كان ملف PDF عبارة عن صور ممسوحة ضوئيًا فقد تحتاج إلى تقنية OCR لاستخراج النص.
+      </p>
+      <button type="button" id="analyzeBtn" class="btn">
+        بدء الفحص القانوني
+      </button>
+      <div id="progressWrap" class="progress-wrap" aria-live="polite">
+        <p id="progressMessage" class="progress-message">
+          جارٍ إرسال العقد إلى محرك التحليل...
+        </p>
+        <div class="progress-track">
+          <div class="progress-bar"></div>
+        </div>
+      </div>
+      <div id="errorNotice" class="notice" role="alert"></div>
+    </section>
+    <section id="resultContainer" class="card" aria-live="polite">
+      <div class="result-header">
+        <h2>نتيجة المراجعة القانونية</h2>
+        <span id="statusBadge" class="status review">يحتاج مراجعة</span>
+      </div>
+      <div id="summaryText" class="summary"></div>
+      <h3 class="violations-heading">الملاحظات والمخاطر القانونية</h3>
       <div id="violationsList"></div>
-    </div>
-  </div>
-
+      <div class="legal-disclaimer">
+        تنبيه: فطن AI أداة مساعدة للمراجعة القانونية، ولا تمثل نتائجها
+        اعتمادًا نظاميًا أو فتوى قانونية نهائية. يجب التحقق من النصوص
+        النظامية المشار إليها ومراعاة الوقائع واللوائح السارية قبل اتخاذ
+        قرار قانوني.
+      </div>
+    </section>
+    <footer>
+      فطن AI — مساعد ذكي لمراجعة عقود العمل<br>
+      تتم معالجة العقد عبر الخادم المتصل بخدمة الذكاء الاصطناعي عند بدء الفحص.
+    </footer>
+  </main>
   <script>
-    // إعداد قارئ ملفات الـ PDF
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    async function handleFileSelect(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      document.getElementById('fileNameDisplay').innerText = '📁 تم اختيار الملف: ' + file.name;
-      
-      if (file.type === 'application/pdf') {
-        const reader = new FileReader();
-        reader.onload = async function() {
-          const typedarray = new Uint8Array(this.result);
-          try {
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            let fullText = '';
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i);
-              const textContent = await page.getTextContent();
-              const pageText = textContent.items.map(item => item.str).join(' ');
-              fullText += pageText + '\n';
-            }
-            document.getElementById('contractInput').value = fullText;
-          } catch (err) {
-            alert('خطأ في قراءة ملف الـ PDF: ' + err.message);
-          }
-        };
-        reader.readAsArrayBuffer(file);
-      } else if (file.type === 'text/plain') {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          document.getElementById('contractInput').value = e.target.result;
-        };
-        reader.readAsText(file, 'UTF-8');
-      } else {
-        alert('الرجاء رفع ملف PDF أو نص TXT فقط');
+    (() => {
+      "use strict";
+      const fileInput = document.getElementById("contractFile");
+      const dropzone = document.getElementById("dropzone");
+      const contractInput = document.getElementById("contractInput");
+      const analyzeBtn = document.getElementById("analyzeBtn");
+      const fileInfo = document.getElementById("fileInfo");
+      const fileName = document.getElementById("fileName");
+      const fileNotice = document.getElementById("fileNotice");
+      const errorNotice = document.getElementById("errorNotice");
+      const progressWrap = document.getElementById("progressWrap");
+      const progressMessage = document.getElementById("progressMessage");
+      const resultContainer = document.getElementById("resultContainer");
+      const statusBadge = document.getElementById("statusBadge");
+      const summaryText = document.getElementById("summaryText");
+      const violationsList = document.getElementById("violationsList");
+      let selectedFile = null;
+      if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
       }
-    }
-
-    async function analyzeContract() {
-      const text = document.getElementById('contractInput').value;
-      const btn = document.getElementById('analyzeBtn');
-      const resultContainer = document.getElementById('resultContainer');
-      const statusBadge = document.getElementById('statusBadge');
-      const summaryText = document.getElementById('summaryText');
-      const violationsList = document.getElementById('violationsList');
-
-      if (!text.trim()) {
-        alert('يرجى رفع ملف العقد أو كتابة/لصق نصه أولاً.');
-        return;
+      function showNotice(element, message, type) {
+        element.textContent = message;
+        element.className = "notice " + type;
       }
-
-      btn.disabled = true;
-      btn.innerHTML = '<span>جاري قراءة العقد والفحص القانوني...</span>';
-      resultContainer.style.display = 'none';
-
-      try {
-        const response = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contractText: text })
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          alert('حدث خطأ أثناء الفحص: ' + data.error);
-        } else {
-          const isLegal = data.status === "نظامي";
-          statusBadge.className = 'status-badge ' + (isLegal ? 'status-legal' : 'status-illegal');
-          statusBadge.innerText = 'حالة العقد: ' + data.status;
-
-          summaryText.innerHTML = '<strong>الملخص القانوني:</strong> ' + data.summary;
-
-          violationsList.innerHTML = '';
-          if (data.violations && data.violations.length > 0) {
-            data.violations.forEach(v => {
-              const item = document.createElement('div');
-              item.className = 'violation-card';
-              item.innerHTML = `
-                <div class="violation-title">⚠️ ${v.item}</div>
-                <div class="violation-article">المادة المرجعية: ${v.article}</div>
-                <div class="violation-desc">${v.issue}</div>
-                <div class="violation-fix"><strong>التعديل المقترح:</strong> ${v.suggestedClause}</div>
-              `;
-              violationsList.appendChild(item);
-            });
-          } else {
-            violationsList.innerHTML = '<div style="color:#4ade80; text-align:center; padding:15px;">✅ لم يتم العثور على أي مخالفات صريحة لنظام العمل السعودي.</div>';
-          }
-          resultContainer.style.display = 'block';
+      function clearNotice(element) {
+        element.textContent = "";
+        element.className = "notice";
+      }
+      function formatBytes(bytes) {
+        if (bytes < 1024) return bytes + " بايت";
+        if (bytes < 1024 * 1024) {
+          return (bytes / 1024).toFixed(1) + " كيلوبايت";
         }
-      } catch (err) {
-        alert('حدث خطأ في الاتصال بالخادم: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>بدء الفحص والتطابق الآلي</span>';
+        return (bytes / (1024 * 1024)).toFixed(2) + " ميجابايت";
       }
-    }
+      function resetSelectedFile() {
+        selectedFile = null;
+        fileInput.value = "";
+        fileInfo.style.display = "none";
+        fileName.textContent = "";
+        clearNotice(fileNotice);
+      }
+      function readTextFile(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.onerror = () => reject(new Error("تعذرت قراءة الملف النصي."));
+          reader.readAsText(file, "UTF-8");
+        });
+      }
+      async function readPdfFile(file) {
+        if (!window.pdfjsLib) {
+          throw new Error("تعذر تحميل مكتبة قراءة PDF. تحقق من اتصال الإنترنت.");
+        }
+        const buffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({
+          data: new Uint8Array(buffer)
+        }).promise;
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          progressMessage.textContent =
+            "جارٍ استخراج النص من صفحة " + i + " من " + pdf.numPages + "...";
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const pageText = content.items
+            .filter(item => typeof item.str === "string")
+            .map(item => item.str)
+            .join(" ");
+          pages.push("الصفحة " + i + "\n" + pageText);
+        }
+        return pages.join("\n\n");
+      }
+      async function handleFile(file) {
+        if (!file) return;
+        clearNotice(fileNotice);
+        clearNotice(errorNotice);
+        const isPdf =
+          file.type === "application/pdf" ||
+          file.name.toLowerCase().endsWith(".pdf");
+        const isTxt =
+          file.type === "text/plain" ||
+          file.name.toLowerCase().endsWith(".txt");
+        if (!isPdf && !isTxt) {
+          showNotice(fileNotice, "صيغة الملف غير مدعومة. اختر PDF أو TXT.", "error");
+          return;
+        }
+        if (file.size > 15 * 1024 * 1024) {
+          showNotice(fileNotice, "حجم الملف يتجاوز 15 ميجابايت. اختر ملفًا أصغر.", "error");
+          return;
+        }
+        selectedFile = file;
+        fileName.textContent = file.name + " — " + formatBytes(file.size);
+        fileInfo.style.display = "block";
+        analyzeBtn.disabled = true;
+        analyzeBtn.textContent = "جارٍ قراءة الملف...";
+        progressWrap.style.display = "block";
+        progressMessage.textContent = "جارٍ استخراج النص من الملف...";
+        try {
+          let text;
+          if (isPdf) {
+            text = await readPdfFile(file);
+          } else {
+            text = await readTextFile(file);
+          }
+          contractInput.value = text;
+          if (!text.trim()) {
+            showNotice(
+              fileNotice,
+              "لم يتم العثور على نص قابل للاستخراج. قد يكون PDF عبارة عن صور ممسوحة ضوئيًا؛ تحتاج هذه الحالة إلى OCR.",
+              "error"
+            );
+          } else {
+            showNotice(
+              fileNotice,
+              "تم استخراج النص بنجاح. راجعه قبل بدء الفحص القانوني.",
+              "success"
+            );
+          }
+        } catch (error) {
+          showNotice(
+            fileNotice,
+            error.message || "حدث خطأ أثناء قراءة الملف.",
+            "error"
+          );
+        } finally {
+          analyzeBtn.disabled = false;
+          analyzeBtn.textContent = "بدء الفحص القانوني";
+          progressWrap.style.display = "none";
+        }
+      }
+      dropzone.addEventListener("click", () => fileInput.click());
+      dropzone.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          fileInput.click();
+        }
+      });
+      fileInput.addEventListener("change", event => {
+        handleFile(event.target.files[0]);
+      });
+      ["dragenter", "dragover"].forEach(eventName => {
+        dropzone.addEventListener(eventName, event => {
+          event.preventDefault();
+          dropzone.classList.add("dragover");
+        });
+      });
+      ["dragleave", "drop"].forEach(eventName => {
+        dropzone.addEventListener(eventName, event => {
+          event.preventDefault();
+          dropzone.classList.remove("dragover");
+        });
+      });
+      dropzone.addEventListener("drop", event => {
+        const file = event.dataTransfer.files[0];
+        if (file) handleFile(file);
+      });
+      document.getElementById("removeFileBtn").addEventListener("click", () => {
+        resetSelectedFile();
+        contractInput.value = "";
+      });
+      function addField(parent, label, value, extraClass = "") {
+        const wrapper = document.createElement("div");
+        wrapper.className = "field " + extraClass;
+        const title = document.createElement("span");
+        title.className = "field-label";
+        title.textContent = label;
+        const content = document.createElement("div");
+        content.textContent =
+          value === null || value === undefined || value === ""
+            ? "لم يحدد المحرك هذه المعلومة."
+            : String(value);
+        wrapper.appendChild(title);
+        wrapper.appendChild(content);
+        parent.appendChild(wrapper);
+      }
+      function renderResults(data) {
+        const status = data.status || "يحتاج مراجعة";
+        statusBadge.textContent = "حالة العقد: " + status;
+        statusBadge.className = "status";
+        if (status === "نظامي") {
+          statusBadge.classList.add("legal");
+        } else if (status === "غير نظامي") {
+          statusBadge.classList.add("illegal");
+        } else {
+          statusBadge.classList.add("review");
+        }
+        summaryText.textContent =
+          data.summary || "لم يتم إرجاع ملخص للعقد.";
+        violationsList.replaceChildren();
+        const violations = Array.isArray(data.violations)
+          ? data.violations
+          : [];
+        if (violations.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty-state";
+          empty.textContent =
+            status === "نظامي"
+              ? "لم يرصد المحرك مخالفات صريحة في الفحص الحالي. لا يعني ذلك ضمان سلامة جميع بنود العقد."
+              : "لم يعرض المحرك ملاحظات تفصيلية. يوصى بمراجعة العقد والتحقق من اكتمال التحليل.";
+          violationsList.appendChild(empty);
+        } else {
+          violations.forEach((violation, index) => {
+            const item = document.createElement("article");
+            item.className = "violation";
+            const heading = document.createElement("h3");
+            heading.textContent =
+              (index + 1) + ". " + (violation.item || "ملاحظة قانونية");
+            item.appendChild(heading);
+            addField(item, "شرح الملاحظة والمخاطر", violation.issue);
+            addField(item, "المادة والمصدر النظامي", violation.article);
+            addField(
+              item,
+              "التعديل أو الصياغة المقترحة",
+              violation.suggestedClause,
+              "fix"
+            );
+            violationsList.appendChild(item);
+          });
+        }
+        resultContainer.style.display = "block";
+        resultContainer.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }
+      async function analyzeContract() {
+        const text = contractInput.value.trim();
+        clearNotice(errorNotice);
+        clearNotice(fileNotice);
+        if (!text) {
+          showNotice(
+            errorNotice,
+            "يرجى رفع عقد أو لصق نص العقد قبل بدء الفحص.",
+            "error"
+          );
+          return;
+        }
+        if (text.length > 150000) {
+          showNotice(
+            errorNotice,
+            "النص طويل جدًا لهذه النسخة. يرجى تقسيم العقد إلى أجزاء أصغر.",
+            "error"
+          );
+          return;
+        }
+        analyzeBtn.disabled = true;
+        analyzeBtn.textContent = "جارٍ تحليل العقد...";
+        progressWrap.style.display = "block";
+        progressMessage.textContent = "جارٍ إرسال العقد إلى محرك الذكاء الاصطناعي...";
+        resultContainer.style.display = "none";
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 120000);
+          let response;
+          try {
+            response = await fetch("/api/analyze", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                contractText: text
+              }),
+              signal: controller.signal
+            });
+          } finally {
+            clearTimeout(timeout);
+          }
+          const rawResponse = await response.text();
+          let data;
+          try {
+            data = JSON.parse(rawResponse);
+          } catch {
+            throw new Error(
+              response.status === 404
+                ? "لم يتم العثور على API التحليل. تأكد من وجود الملف api/analyze.js وإعادة نشر المشروع على Vercel."
+                : "استجابة الخادم ليست JSON صالحًا. تحقق من إعدادات Vercel وسجلات التشغيل."
+            );
+          }
+          if (!response.ok) {
+            throw new Error(
+              data.error ||
+              "فشل التحليل. رمز استجابة الخادم: " + response.status
+            );
+          }
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          if (
+            typeof data.summary !== "string" ||
+            !Array.isArray(data.violations)
+          ) {
+            throw new Error("أعاد الخادم نتيجة لا تطابق البنية المتوقعة.");
+          }
+          renderResults(data);
+        } catch (error) {
+          let message = error.message || "حدث خطأ غير معروف.";
+          if (error.name === "AbortError") {
+            message = "انتهت مهلة انتظار التحليل. حاول مجددًا أو قسّم العقد.";
+          } else if (
+            error instanceof TypeError &&
+            !navigator.onLine
+          ) {
+            message = "تحقق من اتصال الإنترنت ثم حاول مجددًا.";
+          }
+          showNotice(
+            errorNotice,
+            "تعذر إكمال الفحص: " + message,
+            "error"
+          );
+        } finally {
+          analyzeBtn.disabled = false;
+          analyzeBtn.textContent = "بدء الفحص القانوني";
+          progressWrap.style.display = "none";
+        }
+      }
+      analyzeBtn.addEventListener("click", analyzeContract);
+    })();
   </script>
 </body>
 </html>
