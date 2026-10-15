@@ -30,7 +30,10 @@ export default async function handler(req, res) {
 }`;
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey.trim()}`, {
+    // جلب قائمة النماذج المتاحة للمفتاح أو استخدام gemini-2.5-flash / gemini-2.0-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
+    
+    let response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -39,7 +42,22 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await response.json();
+    let data = await response.json();
+
+    // في حال عدم توفر 2.5 جرب v1 المباشر مع gemini-1.5-flash
+    if (data.error) {
+      const fallbackUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`;
+      response = await fetch(fallbackUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\n[نص العقد المراد فحصه]:\n" + contractText }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      data = await response.json();
+    }
+
     if (data.error) {
       throw new Error(data.error.message);
     }
