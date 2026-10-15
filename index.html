@@ -3,44 +3,93 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>فطن AI - مدقق عقود العمل الذكي</title>
+  <title>فطن AI - تدقيق عقود العمل الذكي</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; }
-    .card { background: #1e1e1e; max-width: 500px; margin: 40px auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-    h1 { color: #d4af37; font-size: 24px; }
-    textarea { width: 100%; height: 150px; margin-top: 15px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; }
-    button { background: #d4af37; color: #000; font-weight: bold; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; width: 100%; font-size: 16px; }
-    button:disabled { opacity: 0.5; }
-    #result { margin-top: 20px; text-align: right; background: #2a2a2a; padding: 15px; border-radius: 8px; display: none; }
-    .violation { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px; }
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(23, 31, 48, 0.7);
+      --gold: #d4af37;
+      --gold-hover: #b59226;
+      --text: #f3f4f6;
+      --subtext: #9ca3af;
+      --border: rgba(212, 175, 55, 0.2);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Sans Arabic', sans-serif; }
+    body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; background-image: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.15) 0%, transparent 70%); }
+    .header { text-align: center; margin-bottom: 30px; }
+    .logo-container { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 10px; }
+    .logo-icon { background: linear-gradient(135deg, var(--gold), #8a6d1c); width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 22px; color: #000; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3); }
+    h1 { font-size: 28px; font-weight: 700; color: #fff; }
+    p.subtitle { color: var(--subtext); font-size: 14px; margin-top: 5px; }
+    .badge { display: inline-block; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border); color: var(--gold); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-top: 10px; }
+    .main-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 650px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+    .input-group { margin-bottom: 20px; text-align: right; }
+    label { display: block; color: var(--gold); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+    textarea { width: 100%; height: 180px; background: rgba(11, 15, 25, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; color: #fff; font-size: 14px; line-height: 1.6; resize: vertical; transition: all 0.3s; }
+    textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); }
+    .btn { width: 100%; background: linear-gradient(135deg, var(--gold), #a37f20); color: #000; font-weight: 700; font-size: 16px; border: none; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 20px rgba(212, 175, 55, 0.25); display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .btn:hover { background: linear-gradient(135deg, #e5be44, var(--gold)); transform: translateY(-2px); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    #resultContainer { margin-top: 30px; text-align: right; display: none; }
+    .status-badge { display: inline-block; padding: 6px 16px; border-radius: 8px; font-weight: bold; font-size: 14px; margin-bottom: 15px; }
+    .status-legal { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .status-illegal { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .summary-box { background: rgba(255,255,255,0.03); border-right: 3px solid var(--gold); padding: 15px; border-radius: 0 10px 10px 0; margin-bottom: 20px; font-size: 14px; color: #e5e7eb; }
+    .violation-card { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 18px; margin-bottom: 15px; }
+    .violation-title { color: #f87171; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+    .violation-desc { color: #d1d5db; font-size: 13px; margin-bottom: 10px; line-height: 1.5; }
+    .violation-article { font-size: 12px; color: var(--gold); background: rgba(212, 175, 55, 0.1); padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px; }
+    .violation-fix { background: rgba(34, 197, 94, 0.08); border-right: 2px solid #22c55e; padding: 10px; border-radius: 0 6px 6px 0; font-size: 13px; color: #86efac; }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h1>فطن AI ⚖️</h1>
-    <p>فحص وتدقيق عقد العمل آلياً وفق نظام العمل السعودي</p>
-    
-    <textarea id="contractInput" placeholder="الصق نص العقد هنا للتحليل..."></textarea>
-    <button id="analyzeBtn" onclick="analyzeContract()">بدء الفحص الآلي المباشر</button>
+  <div class="header">
+    <div class="logo-container">
+      <div class="logo-icon">ف</div>
+      <h1>فطن AI</h1>
+    </div>
+    <p class="subtitle">مدقق عقود العمل الذكي المعتمد - نظام العمل السعودي</p>
+    <div class="badge">⚖️ سيرفر خفي آمن ومباشر</div>
+  </div>
 
-    <div id="result"></div>
+  <div class="main-card">
+    <div class="input-group">
+      <label for="contractInput">نص العقد المراد فحصه نظامياً:</label>
+      <textarea id="contractInput" placeholder="الصق بنود عقد العمل هنا للفحص الآلي ودراسة مدى مطابقتها لنظام العمل السعودي ولائحته التنفيذية..."></textarea>
+    </div>
+
+    <button id="analyzeBtn" class="btn" onclick="analyzeContract()">
+      <span>بدء الفحص والتطابق الآلي</span>
+    </button>
+
+    <div id="resultContainer">
+      <div id="statusBadge" class="status-badge"></div>
+      <div id="summaryText" class="summary-box"></div>
+      <div id="violationsList"></div>
+    </div>
   </div>
 
   <script>
     async function analyzeContract() {
       const text = document.getElementById('contractInput').value;
       const btn = document.getElementById('analyzeBtn');
-      const resultDiv = document.getElementById('result');
+      const resultContainer = document.getElementById('resultContainer');
+      const statusBadge = document.getElementById('statusBadge');
+      const summaryText = document.getElementById('summaryText');
+      const violationsList = document.getElementById('violationsList');
 
       if (!text.trim()) {
-        alert('الرجاء كتابة أو لصق نص العقد أولاً');
+        alert('يرجى كتابة أو لصق نص العقد أولاً.');
         return;
       }
 
       btn.disabled = true;
-      btn.innerText = 'جاري التحليل...';
-      resultDiv.style.display = 'none';
+      btn.innerHTML = '<span>جاري المعالجة والفحص القانوني...</span>';
+      resultContainer.style.display = 'none';
 
       try {
         const response = await fetch('/api/analyze', {
@@ -52,30 +101,37 @@
         const data = await response.json();
 
         if (data.error) {
-          resultDiv.innerHTML = `<p style="color:#ff5555;">حدث خطأ: ${data.error}</p>`;
+          alert('حدث خطأ أثناء الفحص: ' + data.error);
         } else {
-          let html = `<h3>النتيجة: ${data.status}</h3><p>${data.summary}</p><hr>`;
+          const isLegal = data.status === "نظامي";
+          statusBadge.className = 'status-badge ' + (isLegal ? 'status-legal' : 'status-illegal');
+          statusBadge.innerText = 'حالة العقد: ' + data.status;
+
+          summaryText.innerHTML = '<strong>الملخص القانوني:</strong> ' + data.summary;
+
+          violationsList.innerHTML = '';
           if (data.violations && data.violations.length > 0) {
-            html += `<h4>المخالفات المرصودة:</h4>`;
             data.violations.forEach(v => {
-              html += `<div class="violation">
-                <strong>المخالفة:</strong> ${v.item}<br>
-                <strong>التفاصيل:</strong> ${v.issue}<br>
-                <strong>المادة:</strong> ${v.article}<br>
-                <strong>التعديل المقترح:</strong> ${v.suggestedClause}
-              </div>`;
+              const item = document.createElement('div');
+              item.className = 'violation-card';
+              item.innerHTML = `
+                <div class="violation-title">⚠️ ${v.item}</div>
+                <div class="violation-article">المادة المرجعية: ${v.article}</div>
+                <div class="violation-desc">${v.issue}</div>
+                <div class="violation-fix"><strong>التعديل المقترح:</strong> ${v.suggestedClause}</div>
+              `;
+              violationsList.appendChild(item);
             });
           } else {
-            html += `<p style="color:#55ff55;">لم يتم العثور على مخالفات صريحة.</p>`;
+            violationsList.innerHTML = '<div style="color:#4ade80; text-align:center; padding:15px;">✅ لم يتم العثور على أي مخالفات صريحة لنظام العمل السعودي.</div>';
           }
-          resultDiv.innerHTML = html;
+          resultContainer.style.display = 'block';
         }
       } catch (err) {
-        resultDiv.innerHTML = `<p style="color:#ff5555;">حدث خطأ في الاتصال بالنظام: ${err.message}</p>`;
+        alert('حدث خطأ في الاتصال بالخادم: ' + err.message);
       } finally {
-        resultDiv.style.display = 'block';
         btn.disabled = false;
-        btn.innerText = 'بدء الفحص الآلي المباشر';
+        btn.innerHTML = '<span>بدء الفحص والتطابق الآلي</span>';
       }
     }
   </script>
