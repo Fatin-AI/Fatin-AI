@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <!-- مكتبة قراءة ملفات الـ PDF مباشرة من المتصفح -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     :root {
       --bg: #0b0f19;
@@ -19,7 +21,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'IBM Plex Sans Arabic', sans-serif; }
     body { background-color: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; background-image: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.15) 0%, transparent 70%); }
-    .header { text-align: center; margin-bottom: 30px; }
+    .header { text-align: center; margin-bottom: 25px; }
     .logo-container { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 10px; }
     .logo-icon { background: linear-gradient(135deg, var(--gold), #8a6d1c); width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 22px; color: #000; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3); }
     h1 { font-size: 28px; font-weight: 700; color: #fff; }
@@ -28,11 +30,21 @@
     .main-card { background: var(--card-bg); backdrop-filter: blur(16px); border: 1px solid var(--border); border-radius: 20px; width: 100%; max-width: 650px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
     .input-group { margin-bottom: 20px; text-align: right; }
     label { display: block; color: var(--gold); font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-    textarea { width: 100%; height: 180px; background: rgba(11, 15, 25, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; color: #fff; font-size: 14px; line-height: 1.6; resize: vertical; transition: all 0.3s; }
-    textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 15px rgba(212, 175, 55, 0.2); }
+    
+    /* تصميم زر رفع الملفات */
+    .file-dropzone { border: 2px dashed rgba(212, 175, 55, 0.4); background: rgba(11, 15, 25, 0.5); padding: 25px; border-radius: 12px; text-align: center; cursor: pointer; transition: all 0.3s; margin-bottom: 15px; }
+    .file-dropzone:hover { border-color: var(--gold); background: rgba(212, 175, 55, 0.05); }
+    .file-dropzone p { color: var(--subtext); font-size: 14px; margin-top: 5px; }
+    .file-dropzone input { display: none; }
+    #fileNameDisplay { color: var(--gold); font-size: 13px; margin-top: 8px; font-weight: 600; }
+
+    textarea { width: 100%; height: 130px; background: rgba(11, 15, 25, 0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; color: #fff; font-size: 14px; line-height: 1.6; resize: vertical; }
+    textarea:focus { outline: none; border-color: var(--gold); }
+    
     .btn { width: 100%; background: linear-gradient(135deg, var(--gold), #a37f20); color: #000; font-weight: 700; font-size: 16px; border: none; border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 20px rgba(212, 175, 55, 0.25); display: flex; align-items: center; justify-content: center; gap: 10px; }
     .btn:hover { background: linear-gradient(135deg, #e5be44, var(--gold)); transform: translateY(-2px); }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    
     #resultContainer { margin-top: 30px; text-align: right; display: none; }
     .status-badge { display: inline-block; padding: 6px 16px; border-radius: 8px; font-weight: bold; font-size: 14px; margin-bottom: 15px; }
     .status-legal { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
@@ -53,13 +65,22 @@
       <h1>فطن AI</h1>
     </div>
     <p class="subtitle">مدقق عقود العمل الذكي المعتمد - نظام العمل السعودي</p>
-    <div class="badge">⚖️ سيرفر خفي آمن ومباشر</div>
+    <div class="badge">⚖️ دعم كامل لقراءة ملفات الـ PDF والنصوص</div>
   </div>
 
   <div class="main-card">
     <div class="input-group">
-      <label for="contractInput">نص العقد المراد فحصه نظامياً:</label>
-      <textarea id="contractInput" placeholder="الصق بنود عقد العمل هنا للفحص الآلي ودراسة مدى مطابقتها لنظام العمل السعودي ولائحته التنفيذية..."></textarea>
+      <label>رفع ملف العقد (PDF أو TXT) أو اللصق اليدوي:</label>
+      
+      <!-- منطقة رفع الملفات -->
+      <div class="file-dropzone" onclick="document.getElementById('contractFile').click()">
+        <span style="font-size: 28px;">📄</span>
+        <p>اضغط هنا لاختيار ملف العقد (PDF)</p>
+        <input type="file" id="contractFile" accept=".pdf,.txt" onchange="handleFileSelect(event)">
+        <div id="fileNameDisplay"></div>
+      </div>
+
+      <textarea id="contractInput" placeholder="أو الصق بنود عقد العمل هنا مباشرة للفحص الآلي..."></textarea>
     </div>
 
     <button id="analyzeBtn" class="btn" onclick="analyzeContract()">
@@ -74,6 +95,45 @@
   </div>
 
   <script>
+    // إعداد قارئ ملفات الـ PDF
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    async function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      document.getElementById('fileNameDisplay').innerText = '📁 تم اختيار الملف: ' + file.name;
+      
+      if (file.type === 'application/pdf') {
+        const reader = new FileReader();
+        reader.onload = async function() {
+          const typedarray = new Uint8Array(this.result);
+          try {
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + '\n';
+            }
+            document.getElementById('contractInput').value = fullText;
+          } catch (err) {
+            alert('خطأ في قراءة ملف الـ PDF: ' + err.message);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else if (file.type === 'text/plain') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById('contractInput').value = e.target.result;
+        };
+        reader.readAsText(file, 'UTF-8');
+      } else {
+        alert('الرجاء رفع ملف PDF أو نص TXT فقط');
+      }
+    }
+
     async function analyzeContract() {
       const text = document.getElementById('contractInput').value;
       const btn = document.getElementById('analyzeBtn');
@@ -83,12 +143,12 @@
       const violationsList = document.getElementById('violationsList');
 
       if (!text.trim()) {
-        alert('يرجى كتابة أو لصق نص العقد أولاً.');
+        alert('يرجى رفع ملف العقد أو كتابة/لصق نصه أولاً.');
         return;
       }
 
       btn.disabled = true;
-      btn.innerHTML = '<span>جاري المعالجة والفحص القانوني...</span>';
+      btn.innerHTML = '<span>جاري قراءة العقد والفحص القانوني...</span>';
       resultContainer.style.display = 'none';
 
       try {
