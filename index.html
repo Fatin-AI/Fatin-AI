@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>فطن AI - مدقق عقود العمل الذكي</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; }
+    .card { background: #1e1e1e; max-width: 500px; margin: 40px auto; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    h1 { color: #d4af37; font-size: 24px; }
+    textarea { width: 100%; height: 150px; margin-top: 15px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #2a2a2a; color: #fff; box-sizing: border-box; }
+    button { background: #d4af37; color: #000; font-weight: bold; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; margin-top: 15px; width: 100%; font-size: 16px; }
+    button:disabled { opacity: 0.5; }
+    #result { margin-top: 20px; text-align: right; background: #2a2a2a; padding: 15px; border-radius: 8px; display: none; }
+    .violation { border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h1>فطن AI ⚖️</h1>
+    <p>فحص وتدقيق عقد العمل آلياً وفق نظام العمل السعودي</p>
+    
+    <textarea id="contractInput" placeholder="الصق نص العقد هنا للتحليل..."></textarea>
+    <button id="analyzeBtn" onclick="analyzeContract()">بدء الفحص الآلي المباشر</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function analyzeContract() {
+      const text = document.getElementById('contractInput').value;
+      const btn = document.getElementById('analyzeBtn');
+      const resultDiv = document.getElementById('result');
+
+      if (!text.trim()) {
+        alert('الرجاء كتابة أو لصق نص العقد أولاً');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'جاري التحليل...';
+      resultDiv.style.display = 'none';
+
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contractText: text })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          resultDiv.innerHTML = `<p style="color:#ff5555;">حدث خطأ: ${data.error}</p>`;
+        } else {
+          let html = `<h3>النتيجة: ${data.status}</h3><p>${data.summary}</p><hr>`;
+          if (data.violations && data.violations.length > 0) {
+            html += `<h4>المخالفات المرصودة:</h4>`;
+            data.violations.forEach(v => {
+              html += `<div class="violation">
+                <strong>المخالفة:</strong> ${v.item}<br>
+                <strong>التفاصيل:</strong> ${v.issue}<br>
+                <strong>المادة:</strong> ${v.article}<br>
+                <strong>التعديل المقترح:</strong> ${v.suggestedClause}
+              </div>`;
+            });
+          } else {
+            html += `<p style="color:#55ff55;">لم يتم العثور على مخالفات صريحة.</p>`;
+          }
+          resultDiv.innerHTML = html;
+        }
+      } catch (err) {
+        resultDiv.innerHTML = `<p style="color:#ff5555;">حدث خطأ في الاتصال بالنظام: ${err.message}</p>`;
+      } finally {
+        resultDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.innerText = 'بدء الفحص الآلي المباشر';
+      }
+    }
+  </script>
+</body>
+</html>
