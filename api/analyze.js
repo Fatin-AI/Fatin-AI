@@ -1,8 +1,10 @@
 export default async function handler(req, res) {
 
-  // السماح بطلبات POST فقط
+  // قبول طلبات POST فقط
 
   if (req.method !== "POST") {
+
+    res.setHeader("Allow", "POST");
 
     return res.status(405).json({
 
@@ -12,29 +14,23 @@ export default async function handler(req, res) {
 
   }
 
-  // قراءة مفتاح Gemini من إعدادات Vercel
-
   const apiKey = process.env.GEMINI_API_KEY;
+
+  const model = "gemini-3.8-flash";
 
   if (!apiKey) {
 
-    console.error("Missing GEMINI_API_KEY environment variable");
+    console.error("Configuration error: GEMINI_API_KEY is missing");
 
     return res.status(500).json({
 
-      error: "مفتاح Gemini غير مضبوط في إعدادات الخادم."
+      error: "مفتاح Gemini غير مضبوط في إعدادات Vercel."
 
     });
 
   }
 
-  // استخدام النموذج المتاح حاليًا
-
-  const model = "gemini-3.8-flash";
-
   try {
-
-    // قراءة نص العقد
 
     const contractText = req.body?.contractText;
 
@@ -54,19 +50,15 @@ export default async function handler(req, res) {
 
     }
 
-    // الحد الأقصى للنص لتقليل الطلبات الضخمة
-
     if (contractText.length > 150000) {
 
       return res.status(413).json({
 
-        error: "حجم نص العقد كبير جدًا. يرجى تقسيم العقد."
+        error: "نص العقد كبير جدًا. يرجى تقسيمه إلى أجزاء."
 
       });
 
     }
-
-    // تعليمات التحليل القانوني
 
     const prompt = `
 
@@ -74,39 +66,35 @@ export default async function handler(req, res) {
 
 واللوائح المعمول بها في المملكة العربية السعودية.
 
-مهمتك تحليل نص عقد العمل المقدم، وتحديد البنود التي قد تخالف
+حلل العقد المرفق وحدد:
 
-نظام العمل السعودي أو لوائحه، والبنود الغامضة أو التي تحتاج
+1. البنود التي قد تخالف نظام العمل السعودي.
 
-إلى مراجعة قانونية.
+2. البنود الغامضة أو التي تحمل مخاطر قانونية.
 
-قواعد التحليل:
+3. البنود التي تحتاج إلى تحقق من النص النظامي.
 
-1. حلل العقد بناءً على النصوص النظامية السعودية ذات الصلة.
+4. الصياغات البديلة المقترحة عند الحاجة.
 
-2. لا تخترع مواد نظامية أو أرقام مواد أو أحكامًا قانونية.
+قواعد إلزامية:
 
-3. إذا لم تكن متأكدًا من رقم مادة نظامية، اكتب
+- لا تخترع أرقام مواد أو نصوصًا نظامية.
 
-   "تحتاج إلى التحقق من النص النظامي" بدلًا من اختلاق رقم.
+- إذا لم تتأكد من رقم المادة، اذكر أن المادة تحتاج إلى تحقق.
 
-4. ميّز بين المخالفة النظامية المحتملة، والبند الغامض،
+- لا تعتبر كل بند غير مألوف مخالفة.
 
-   والبند الذي يحتاج إلى مراجعة.
+- فرّق بين المخالفة الواضحة والمسألة التي تحتاج إلى مراجعة.
 
-5. لا تعتبر كل بند غير مألوف مخالفة نظامية.
+- إذا لم تجد مخالفات، أعد مصفوفة violations فارغة.
 
-6. راعِ طبيعة عقد العمل ومحتوياته والنصوص النظامية ذات الصلة.
+- لا تدّعِ أنك تحققت من أحدث النصوص النظامية دون مصدر.
 
-7. إذا لم تجد مخالفة واضحة، فلا تختلق مخالفات.
+- أجب باللغة العربية.
 
-8. قدم اقتراحًا عمليًا لصياغة بديلة عندما يكون ذلك مناسبًا.
+- أخرج كائن JSON صالحًا فقط، دون Markdown أو نص خارجه.
 
-9. أجب باللغة العربية.
-
-10. أخرج JSON صالحًا فقط، دون Markdown أو أي نص خارجه.
-
-يجب أن يكون الرد وفق البنية التالية:
+استخدم البنية التالية بالضبط:
 
 {
 
@@ -118,11 +106,11 @@ export default async function handler(req, res) {
 
     {
 
-      "item": "اسم البند أو وصفه",
+      "item": "اسم البند",
 
-      "article": "المادة النظامية ذات الصلة أو تنبيه بضرورة التحقق",
+      "article": "المادة النظامية أو ضرورة التحقق",
 
-      "issue": "شرح المشكلة وأسبابها",
+      "issue": "شرح المشكلة القانونية",
 
       "suggestedClause": "الصياغة البديلة المقترحة"
 
@@ -131,22 +119,6 @@ export default async function handler(req, res) {
   ]
 
 }
-
-معايير الحالة:
-
-- "غير نظامي": عند وجود مخالفة نظامية واضحة أو محتملة بقوة.
-
-- "يحتاج مراجعة": عند وجود غموض أو نقص في المعلومات أو حاجة
-
-  إلى التحقق من النصوص النظامية.
-
-- "نظامي": عندما لا تظهر مخالفات واضحة في النص المتاح.
-
-إذا لم توجد مخالفات أو ملاحظات، اجعل violations مصفوفة فارغة.
-
-تنبيه: لا تدّعِ أنك تحققت من أحدث النصوص النظامية إذا لم تكن
-
-متاحة لك في الطلب. اذكر حدود الفحص عند الحاجة.
 
 نص العقد المراد فحصه:
 
@@ -158,11 +130,11 @@ ${contractText}
 
 `;
 
-    // الاتصال بواجهة Gemini API
+    // إرسال الطلب إلى Google Gemini Interactions API
 
     const response = await fetch(
 
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      "https://generativelanguage.googleapis.com/v1beta/interactions",
 
       {
 
@@ -178,29 +150,13 @@ ${contractText}
 
         body: JSON.stringify({
 
-          contents: [
+          model: model,
 
-            {
+          input: prompt,
 
-              role: "user",
+          generation_config: {
 
-              parts: [
-
-                {
-
-                  text: prompt
-
-                }
-
-              ]
-
-            }
-
-          ],
-
-          generationConfig: {
-
-            responseMimeType: "application/json"
+            thinking_level: "low"
 
           }
 
@@ -210,11 +166,9 @@ ${contractText}
 
     );
 
-    // قراءة رد الخدمة
+    const data = await response.json();
 
-    const responseData = await response.json();
-
-    // تسجيل تفاصيل الخطأ في سجلات Vercel دون إظهار المفتاح
+    // إظهار تفاصيل الخطأ في سجلات Vercel دون كشف المفتاح
 
     if (!response.ok) {
 
@@ -224,7 +178,7 @@ ${contractText}
 
         response.status,
 
-        JSON.stringify(responseData)
+        JSON.stringify(data)
 
       );
 
@@ -234,7 +188,7 @@ ${contractText}
 
         details:
 
-          responseData?.error?.message ||
+          data?.error?.message ||
 
           `Gemini API returned HTTP ${response.status}`
 
@@ -242,37 +196,61 @@ ${contractText}
 
     }
 
-    // استخراج النص الناتج
+    // استخراج النص الناتج من الاستجابة
 
-    const generatedText =
+    let generatedText = data?.output_text;
 
-      responseData?.candidates?.[0]?.content?.parts
+    // احتياطًا: استخراج النص من عناصر المخرجات إذا لزم
 
-        ?.map((part) => part.text || "")
+    if (!generatedText && Array.isArray(data?.outputs)) {
 
-        .join("")
+      generatedText = data.outputs
 
-        .trim();
+        .filter((item) => item.type === "text" && item.text)
 
-    if (!generatedText) {
+        .map((item) => item.text)
+
+        .join("\n");
+
+    }
+
+    if (
+
+      typeof generatedText !== "string" ||
+
+      generatedText.trim() === ""
+
+    ) {
 
       console.error(
 
-        "Gemini returned no text:",
+        "Gemini returned no output text:",
 
-        JSON.stringify(responseData)
+        JSON.stringify(data)
 
       );
 
       return res.status(502).json({
 
-        error: "لم يُرجع Gemini نتيجة تحليل قابلة للقراءة."
+        error: "لم يُرجع Gemini نصًا قابلًا للقراءة."
 
       });
 
     }
 
-    // تحويل النتيجة إلى JSON
+    // إزالة علامات Markdown إن أضافها النموذج
+
+    generatedText = generatedText
+
+      .trim()
+
+      .replace(/^```json\s*/i, "")
+
+      .replace(/^```\s*/i, "")
+
+      .replace(/\s*```$/, "")
+
+      .trim();
 
     let result;
 
@@ -284,9 +262,11 @@ ${contractText}
 
       console.error(
 
-        "Failed to parse Gemini JSON:",
+        "Gemini JSON parsing error:",
 
-        parseError.message
+        parseError.message,
+
+        generatedText.slice(0, 500)
 
       );
 
@@ -322,23 +302,23 @@ ${contractText}
 
     ) {
 
-      console.error("Invalid Gemini result structure");
+      console.error("Invalid analysis response structure");
 
       return res.status(502).json({
 
-        error: "نتيجة التحليل لا تطابق التنسيق المطلوب."
+        error: "تنسيق نتيجة التحليل غير صحيح."
 
       });
 
     }
 
-    // تنظيف النتائج والتحقق من أنواع الحقول
+    // توحيد أنواع الحقول لتتوافق مع واجهة الموقع
 
     result.violations = result.violations.map((item) => ({
 
       item: String(item?.item || "بند يحتاج إلى مراجعة"),
 
-      article: String(item?.article || "لم تحدد مادة نظامية"),
+      article: String(item?.article || "تحتاج المادة إلى التحقق"),
 
       issue: String(item?.issue || "لم يذكر شرح للملاحظة"),
 
@@ -350,7 +330,7 @@ ${contractText}
 
     }));
 
-    // إرسال النتيجة إلى واجهة الموقع
+    // إرسال النتيجة للواجهة
 
     return res.status(200).json(result);
 
