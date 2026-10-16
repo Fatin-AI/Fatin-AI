@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // قبول طلبات POST فقط
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({
@@ -74,31 +73,33 @@ ${contractText}
 </contract>
 `;
 
-    // قائمة النماذج المتاحة مرتبة بحسب الأولوية والاستقرار في حال وجود ضغط
+    // استخدام النماذج الأكثر استقراراً عبر نقطة generateContent
     const models = [
-      "gemini-3.8-flash",
-      "gemini-2.5-flash",
-      "gemini-1.5-flash"
+      "gemini-1.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-pro"
     ];
 
     let lastErrorDetails = null;
 
     for (const model of models) {
       try {
-        // إرسال الطلب إلى Google Gemini Interactions API
         const response = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/interactions",
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
           {
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey.trim()
+              "Content-Type": "application/json"
             },
             body: JSON.stringify({
-              model: model,
-              input: prompt,
-              generation_config: {
-                thinking_level: "low"
+              contents: [
+                {
+                  parts: [{ text: prompt }]
+                }
+              ],
+              generationConfig: {
+                responseMimeType: "application/json",
+                temperature: 0.2
               }
             })
           }
@@ -106,36 +107,20 @@ ${contractText}
 
         const data = await response.json();
 
-        // في حال وجود ضغط عالي أو خطأ خادم من نموذج معين، ننتقل للنموذج التالي
-        if (response.status === 503 || response.status === 429 || response.status === 502) {
-          console.warn(`Model ${model} returned HTTP ${response.status}, trying fallback model...`);
-          lastErrorDetails = data?.error?.message || `HTTP ${response.status}`;
-          continue;
-        }
-
         if (!response.ok) {
-          console.error("Gemini API error for model", model, response.status, JSON.stringify(data));
+          console.warn(`Model ${model} returned HTTP ${response.status}`, data);
           lastErrorDetails = data?.error?.message || `HTTP ${response.status}`;
           continue;
         }
 
-        // استخراج النص الناتج من الاستجابة
-        let generatedText = data?.output_text;
-
-        // احتياطًا: استخراج النص من عناصر المخرجات إذا لزم
-        if (!generatedText && Array.isArray(data?.outputs)) {
-          generatedText = data.outputs
-            .filter((item) => item.type === "text" && item.text)
-            .map((item) => item.text)
-            .join("\n");
-        }
+        let generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
         if (typeof generatedText !== "string" || generatedText.trim() === "") {
           console.error("Gemini returned no output text for model", model);
           continue;
         }
 
-        // إزالة علامات Markdown إن أضافها النموذج
+        // إزالة علامات Markdown
         generatedText = generatedText
           .trim()
           .replace(/^```json\s*/i, "")
@@ -151,7 +136,6 @@ ${contractText}
           continue;
         }
 
-        // التحقق من بنية النتيجة
         const validStatuses = ["نظامي", "غير نظامي", "يحتاج مراجعة"];
 
         if (
@@ -160,11 +144,10 @@ ${contractText}
           typeof result.summary !== "string" ||
           !Array.isArray(result.violations)
         ) {
-          console.error("Invalid analysis response structure from model", model);
+          console.error("Invalid response structure from model", model);
           continue;
         }
 
-        // توحيد أنواع الحقول لتتوافق مع واجهة الموقع
         result.violations = result.violations.map((item) => ({
           item: String(item?.item || "بند يحتاج إلى مراجعة"),
           article: String(item?.article || "تحتاج المادة إلى التحقق"),
@@ -174,7 +157,6 @@ ${contractText}
           )
         }));
 
-        // تم نجاح التحليل بنجاح وإرجاع النتيجة
         return res.status(200).json(result);
 
       } catch (err) {
@@ -183,7 +165,6 @@ ${contractText}
       }
     }
 
-    // إذا فشلت جميع النماذج
     return res.status(502).json({
       error: "تعذر إكمال التحليل عبر Gemini بسبب ضغط الخوادم.",
       details: lastErrorDetails || "جميع الخوادم المتاحة كانت مشغولة."
