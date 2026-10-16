@@ -6,12 +6,13 @@ export default async function handler(req, res) {
     });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  // يدعم قراءة المفتاح سواء سميته GEMINI_API_KEY أو GROQ_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY;
 
   if (!apiKey) {
-    console.error("Configuration error: GEMINI_API_KEY is missing");
+    console.error("Configuration error: API key is missing");
     return res.status(500).json({
-      error: "مفتاح Gemini غير مضبوط في إعدادات Vercel."
+      error: "مفتاح API غير مضبوط في إعدادات Vercel."
     });
   }
 
@@ -33,10 +34,7 @@ export default async function handler(req, res) {
       });
     }
 
-    const prompt = `
-أنت مساعد قانوني متخصص في مراجعة عقود العمل وفق الأنظمة
-واللوائح المعمول بها في المملكة العربية السعودية.
-
+    const systemPrompt = `أنت مساعد قانوني متخصص في مراجعة عقود العمل وفق الأنظمة واللوائح المعمول بها في المملكة العربية السعودية.
 حلل العقد المرفق وحدد:
 1. البنود التي قد تخالف نظام العمل السعودي.
 2. البنود الغامضة أو التي تحمل مخاطر قانونية.
@@ -49,9 +47,8 @@ export default async function handler(req, res) {
 - لا تعتبر كل بند غير مألوف مخالفة.
 - فرّق بين المخالفة الواضحة والمسألة التي تحتاج إلى مراجعة.
 - إذا لم تجد مخالفات، أعد مصفوفة violations فارغة.
-- لا تدّعِ أنك تحققت من أحدث النصوص النظامية دون مصدر.
 - أجب باللغة العربية.
-- أخرج كائن JSON صالحًا فقط، دون Markdown أو نص خارجه.
+- أخرج كائن JSON صالحًا فقط، دون أي نص خارجه.
 
 استخدم البنية التالية بالضبط:
 {
@@ -65,110 +62,84 @@ export default async function handler(req, res) {
       "suggestedClause": "الصياغة البديلة المقترحة"
     }
   ]
-}
+}`;
 
-نص العقد المراد فحصه:
-<contract>
-${contractText}
-</contract>
-`;
+    // إرسال الطلب إلى Groq API السريع
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey.trim()}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: contractText }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.2
+      })
+    });
 
-    // استخدام النماذج الأكثر استقراراً عبر نقطة generateContent
-    const models = [
-      "gemini-1.5-flash",
-      "gemini-2.0-flash",
-      "gemini-1.5-pro"
-    ];
+    const data = await response.json();
 
-    let lastErrorDetails = null;
-
-    for (const model of models) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [{ text: prompt }]
-                }
-              ],
-              generationConfig: {
-                responseMimeType: "application/json",
-                temperature: 0.2
-              }
-            })
-          }
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          console.warn(`Model ${model} returned HTTP ${response.status}`, data);
-          lastErrorDetails = data?.error?.message || `HTTP ${response.status}`;
-          continue;
-        }
-
-        let generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-        if (typeof generatedText !== "string" || generatedText.trim() === "") {
-          console.error("Gemini returned no output text for model", model);
-          continue;
-        }
-
-        // إزالة علامات Markdown
-        generatedText = generatedText
-          .trim()
-          .replace(/^```json\s*/i, "")
-          .replace(/^```\s*/i, "")
-          .replace(/\s*```$/, "")
-          .trim();
-
-        let result;
-        try {
-          result = JSON.parse(generatedText);
-        } catch (parseError) {
-          console.error("Gemini JSON parsing error:", parseError.message);
-          continue;
-        }
-
-        const validStatuses = ["نظامي", "غير نظامي", "يحتاج مراجعة"];
-
-        if (
-          !result ||
-          !validStatuses.includes(result.status) ||
-          typeof result.summary !== "string" ||
-          !Array.isArray(result.violations)
-        ) {
-          console.error("Invalid response structure from model", model);
-          continue;
-        }
-
-        result.violations = result.violations.map((item) => ({
-          item: String(item?.item || "بند يحتاج إلى مراجعة"),
-          article: String(item?.article || "تحتاج المادة إلى التحقق"),
-          issue: String(item?.issue || "لم يذكر شرح للملاحظة"),
-          suggestedClause: String(
-            item?.suggestedClause || "لا توجد صياغة بديلة مقترحة"
-          )
-        }));
-
-        return res.status(200).json(result);
-
-      } catch (err) {
-        console.error(`Error processing model ${model}:`, err.message);
-        lastErrorDetails = err.message;
-      }
+    if (!response.ok) {
+      console.error("Groq API error:", response.status, JSON.stringify(data));
+      return res.status(502).json({
+        error: "تعذر إكمال التحليل عبر Groq.",
+        details: data?.error?.message || `HTTP ${response.status}`
+      });
     }
 
-    return res.status(502).json({
-      error: "تعذر إكمال التحليل عبر Gemini بسبب ضغط الخوادم.",
-      details: lastErrorDetails || "جميع الخوادم المتاحة كانت مشغولة."
-    });
+    let generatedText = data?.choices?.[0]?.message?.content;
+
+    if (typeof generatedText !== "string" || generatedText.trim() === "") {
+      return res.status(502).json({
+        error: "لم يُرجع نموذج Groq نصًا قابلًا للقراءة."
+      });
+    }
+
+    generatedText = generatedText
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
+
+    let result;
+    try {
+      result = JSON.parse(generatedText);
+    } catch (parseError) {
+      console.error("Groq JSON parsing error:", parseError.message);
+      return res.status(502).json({
+        error: "وصلت نتيجة التحليل بتنسيق غير صالح."
+      });
+    }
+
+    const validStatuses = ["نظامي", "غير نظامي", "يحتاج مراجعة"];
+
+    if (
+      !result ||
+      !validStatuses.includes(result.status) ||
+      typeof result.summary !== "string" ||
+      !Array.isArray(result.violations)
+    ) {
+      return res.status(502).json({
+        error: "تنسيق نتيجة التحليل غير صحيح."
+      });
+    }
+
+    result.violations = result.violations.map((item) => ({
+      item: String(item?.item || "بند يحتاج إلى مراجعة"),
+      article: String(item?.article || "تحتاج المادة إلى التحقق"),
+      issue: String(item?.issue || "لم يذكر شرح للملاحظة"),
+      suggestedClause: String(
+        item?.suggestedClause || "لا توجد صياغة بديلة مقترحة"
+      )
+    }));
+
+    return res.status(200).json(result);
 
   } catch (error) {
     console.error(
