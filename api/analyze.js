@@ -1,47 +1,27 @@
 // api/analyze.js
 // فطن AI — مدقق عقود العمل السعودية | Vercel Serverless Function + Groq API
-//
-// ما يضمنه هذا الملف:
-//  1) كل المسارات (نجاح أو فشل) ترجع JSON صالح — لا HTML ولا نص خام أبدًا.
-//  2) نماذج Groq الحالية (أكتوبر 2026) + fallback + اكتشاف تلقائي للنماذج المتاحة لمفتاحك.
-//  3) لا يُكتب نص العقد في سجلات Vercel (بيانات شخصية حساسة).
-//
-// تشخيص سريع بعد النشر (افتحهما في المتصفح):
-//  - /api/analyze            ← هل الدالة تعمل؟ هل المفتاح مضبوط؟
-//  - /api/analyze?models=1   ← النماذج المتاحة فعليًا لمفتاحك في Groq
-//
-// تخصيص النتيجة: عدّل SYSTEM_PROMPT (الشكل الذي يرجعه النموذج) و normalizeResult
-// ليطابقا الحقول التي تتوقعها واجهتك. إن غيّرت الشكل كليًا فاحذف normalizeResult.
-//
-// صيغة التصدير: ESM (export default) في آخر الملف. لو مشروعك CommonJS وظهر خطأ على export،
-// استبدل آخر سطر بـ:  module.exports = handler;
-
-/* ------------------------------ الإعدادات ------------------------------ */
+// صيغة CommonJS. كل المسارات ترجع JSON صالحًا.
+// تشخيص: /api/analyze  و  /api/analyze?models=1
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
 
-// ترتيب الأفضلية. المصدر: صفحتا Groq الرسميتان (النماذج + الإيقاف) — أكتوبر 2026.
-//  - llama-3.3-70b-versatile و llama-3.1-8b-instant أُوقفا في 16/8/2026 للمجاني والمطوّر → لا تستخدمهما.
-//  - qwen/qwen3.6-27b أُوقف في 14/9/2026، و groq/compound أُوقف في 21/9/2026.
-// لتغيير القائمة بدون تعديل الكود: أضف متغير GROQ_MODELS في Vercel (أسماء مفصولة بفواصل).
 const DEFAULT_MODELS = [
-  'openai/gpt-oss-120b', // Production — الأساسي
-  'openai/gpt-oss-20b', // Production — أسرع وأرخص
-  'qwen/qwen3.8-27b', // Preview — خيار أخير فقط
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.8-27b',
 ];
 
-const TOTAL_BUDGET_MS = 55_000; // أقل من maxDuration (60 ثانية في vercel.json)
-const ATTEMPT_TIMEOUT_MS = 40_000; // مهلة المحاولة الواحدة
-const MIN_ATTEMPT_MS = 4_000; // لا نبدأ محاولة جديدة بأقل من هذا الوقت المتبقي
+const TOTAL_BUDGET_MS = Number(process.env.FUNCTION_BUDGET_MS) || 55_000;
+const ATTEMPT_TIMEOUT_MS = 40_000;
+const MIN_ATTEMPT_MS = Math.min(4_000, Math.floor(TOTAL_BUDGET_MS / 3));
 const MAX_OUTPUT_TOKENS = 8192;
-const MIN_OUTPUT_TOKENS = 1_200; // أقل سقف إخراج مقبول عند تقليصه بسبب حدود الخطة
-const REASONING_EFFORT = 'low'; // لنماذج gpt-oss فقط: low | medium | high
+const MIN_OUTPUT_TOKENS = 1_200;
+const REASONING_EFFORT = 'low';
 const MIN_CONTRACT_CHARS = 40;
 const MAX_CONTRACT_CHARS = 30_000;
-const MODEL_COOLDOWN_MS = 10 * 60_000; // نتجنب النموذج المعطّل 10 دقائق
+const MODEL_COOLDOWN_MS = 10 * 60_000;
 const MODELS_CACHE_MS = 10 * 60_000;
 
-// نماذج لا تصلح لتحليل النصوص (تُستبعد عند الاكتشاف التلقائي)
 const NON_CHAT = /whisper|orpheus|tts|guard|safeguard|embed|compound|moderation|transcri|speech/i;
 
 const SYSTEM_PROMPT = `أنت "فطن AI"، مساعد متخصص في مراجعة عقود العمل وفق نظام العمل السعودي ولوائحه التنفيذية وقرارات وزارة الموارد البشرية والتنمية الاجتماعية.
@@ -90,23 +70,18 @@ const SYSTEM_PROMPT = `أنت "فطن AI"، مساعد متخصص في مراج�
   "disclaimer": "هذا التحليل استرشادي ولا يغني عن استشارة محامٍ أو مختص."
 }`;
 
-/* ------------------- حالة مؤقتة (تبقى بين الطلبات الدافئة) ------------------- */
-
 const state = {
-  lastGood: null, // آخر نموذج نجح
-  deadUntil: new Map(), // نموذج → وقت انتهاء فترة التجنب
-  available: null, // قائمة النماذج المتاحة للمفتاح (من /models)
+  lastGood: null,
+  deadUntil: new Map(),
+  available: null,
   availableAt: 0,
 };
-
-/* ------------------------------ أدوات مساعدة ------------------------------ */
 
 function truncate(value, max = 300) {
   const s = String(value ?? '');
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
-// الرد دائمًا JSON — حتى لو فشل التحويل نرجع JSON بديلًا.
 function send(res, status, payload) {
   try {
     if (res.headersSent) return;
@@ -127,13 +102,11 @@ function send(res, status, payload) {
 }
 
 function setCors(res) {
-  // قيّد الأصل عبر ALLOWED_ORIGIN (مثال: https://your-site.com) إن كانت الواجهة على نطاق مختلف.
   res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-// يقبل أكثر من اسم لحقل نص العقد حتى لا تنكسر الواجهة الحالية.
 function readContractText(req) {
   let body = req.body;
   if (Buffer.isBuffer(body)) body = body.toString('utf8');
@@ -158,16 +131,14 @@ function readContractText(req) {
   return typeof candidate === 'string' ? candidate.trim() : '';
 }
 
-// استخراج JSON من رد النموذج حتى لو لفّه بعلامات Markdown أو بنص إضافي أو بوسم <think>.
 function parseModelJson(text) {
   if (typeof text !== 'string') return null;
   let s = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-  // \x60 = علامة الاقتباس المعكوسة (backtick)
   s = s.replace(/^\x60{3}(?:json)?\s*/i, '').replace(/\s*\x60{3}$/i, '').trim();
   try {
     return JSON.parse(s);
   } catch {
-    /* نكمل المحاولة بالاقتطاع */
+    /* نكمل */
   }
   const a = s.indexOf('{');
   const b = s.lastIndexOf('}');
@@ -181,7 +152,6 @@ function parseModelJson(text) {
   return null;
 }
 
-// اختياري: يضمن وجود الحقول التي تعتمد عليها الواجهة (احذفه أو عدّله إن غيّرت الشكل).
 function normalizeResult(raw) {
   const r =
     raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { summary: String(raw ?? '') };
@@ -196,9 +166,6 @@ function normalizeResult(raw) {
   return r;
 }
 
-/* ------------------------------ الاتصال بـ Groq ------------------------------ */
-
-// طلب واحد بمهلة صارمة تشمل قراءة الجسم. لا يرمي استثناءً أبدًا.
 async function groqRequest(path, { method = 'GET', body } = {}, timeoutMs = 30_000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -235,13 +202,12 @@ function parseGroqError(text) {
       message: String(j?.error?.message ?? ''),
     };
   } catch {
-    return { code: '', message: truncate(text, 200) }; // قد يكون HTML من وسيط
+    return { code: '', message: truncate(text, 200) };
   }
 }
 
-// هل الخطأ يعني أن النموذج غير موجود / موقوف / غير مسموح لحسابك؟
 function isModelProblem(status, e) {
-  if (e.code.startsWith('model_')) return true; // model_not_found, model_decommissioned, model_permission_blocked_*
+  if (e.code.startsWith('model_')) return true;
   if (status === 404) return true;
   if (status === 403 && /model/i.test(e.message)) return true;
   if (
@@ -254,7 +220,6 @@ function isModelProblem(status, e) {
   return false;
 }
 
-// يقرأ "Limit 8000, Requested 10500" من رسالة Groq عند تجاوز حد التوكنز في الدقيقة.
 function parseTokenLimit(message) {
   const m = /Limit\s+(\d+)[\s\S]*?Requested\s+(\d+)/i.exec(message || '');
   return m ? { limit: Number(m[1]), requested: Number(m[2]) } : {};
@@ -291,7 +256,6 @@ function cachedAvailable() {
   return state.available && Date.now() - state.availableAt < MODELS_CACHE_MS ? state.available : null;
 }
 
-// يبني طابور المحاولات: آخر نموذج ناجح أولًا، ثم المفضّلة، ثم (إن عُرفت القائمة) بدائل متاحة.
 function buildQueue(preferred, available = cachedAvailable()) {
   let list = preferred.filter((m) => !isDead(m));
   if (state.lastGood && list.includes(state.lastGood)) {
@@ -312,7 +276,6 @@ function buildQueue(preferred, available = cachedAvailable()) {
   return list;
 }
 
-// محاولة واحدة على نموذج واحد. ترجع { kind, ... } ولا ترمي.
 async function attemptModel(model, messages, timeoutMs, { minimal = false, maxTokens = MAX_OUTPUT_TOKENS } = {}) {
   const body = {
     model,
@@ -372,7 +335,6 @@ function summarizeFailure(attempts) {
     };
   }
   if (attempts.some((a) => a.kind === 'too_large' || a.reduced)) {
-    // تجاوز حد التوكنز للخطة (مثال: الخطة المجانية في Groq = 8 آلاف توكن في الدقيقة).
     return {
       status: 413,
       code: 'TEXT_TOO_LONG',
@@ -415,11 +377,10 @@ function summarizeFailure(attempts) {
   };
 }
 
-// يجرّب النماذج بالترتيب ضمن ميزانية زمنية، ويرجع نتيجة أو سبب فشل — ولا يرمي.
 async function runAnalysis(contractText, requestId) {
   const startedAt = Date.now();
   const timeLeft = () => TOTAL_BUDGET_MS - (Date.now() - startedAt);
-  const nextTimeout = () => Math.min(ATTEMPT_TIMEOUT_MS, timeLeft() - 1_500);
+  const nextTimeout = () => Math.min(ATTEMPT_TIMEOUT_MS, timeLeft() - 1_000);
 
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -449,7 +410,6 @@ async function runAnalysis(contractText, requestId) {
     let maxTokens = MAX_OUTPUT_TOKENS;
     let out = await attemptModel(model, messages, timeout, { maxTokens });
 
-    // تجاوز حد التوكنز في الدقيقة (الخطة المجانية 8K): نقلّص سقف الإخراج بقدر الزيادة ونعيد المحاولة مرة.
     if (out.kind === 'too_large' && out.limit && out.requested > out.limit) {
       const reduced = out.sentMax - (out.requested - out.limit) - 100;
       timeout = nextTimeout();
@@ -459,7 +419,6 @@ async function runAnalysis(contractText, requestId) {
       }
     }
 
-    // رُفض الطلب بـ 400: نعيد المحاولة مرة بطلب مبسّط (بدون response_format/reasoning_effort).
     if (out.kind === 'bad_request') {
       timeout = nextTimeout();
       if (timeout >= MIN_ATTEMPT_MS) {
@@ -479,19 +438,17 @@ async function runAnalysis(contractText, requestId) {
       code: out.code,
       reduced: maxTokens < MAX_OUTPUT_TOKENS,
     });
-    // لا نسجّل نص العقد — فقط بيانات الخطأ.
     console.error(
       `[API_ERROR] ${requestId} model=${model} kind=${out.kind} status=${out.status ?? '-'} code=${out.code || '-'} message=${truncate(out.message)}`
     );
 
-    if (out.kind === 'auth') break; // المفتاح واحد لكل النماذج
+    if (out.kind === 'auth') break;
 
     if (out.kind === 'model_unavailable') {
       state.deadUntil.set(model, Date.now() + MODEL_COOLDOWN_MS);
       if (!discovered) {
-        // نسأل Groq عن النماذج المتاحة فعليًا لهذا المفتاح ونجرّب منها.
         discovered = true;
-        const ids = await discoverModels(Math.min(8_000, timeLeft() - 1_500));
+        const ids = await discoverModels(Math.min(8_000, timeLeft() - 1_000));
         if (ids) {
           console.error(`[API_ERROR] ${requestId} available models: ${truncate(ids.join(', '), 600)}`);
           queue = buildQueue(preferred, ids).filter((m) => !tried.has(m));
@@ -502,8 +459,6 @@ async function runAnalysis(contractText, requestId) {
 
   return { ok: false, attempts, ...summarizeFailure(attempts) };
 }
-
-/* ------------------------------ نقطة التشخيص (GET) ------------------------------ */
 
 async function handleDiagnostics(req, res) {
   const keyOk = Boolean(process.env.GROQ_API_KEY);
@@ -534,8 +489,6 @@ async function handleDiagnostics(req, res) {
   }
   return send(res, 200, out);
 }
-
-/* ------------------------------ المعالج الرئيسي ------------------------------ */
 
 async function handler(req, res) {
   const requestId = Math.random().toString(36).slice(2, 8);
@@ -594,7 +547,6 @@ async function handler(req, res) {
     data.meta = { model: result.model, requestId };
     return send(res, 200, data);
   } catch (err) {
-    // شبكة أمان أخيرة: أي استثناء غير متوقع يتحول إلى JSON بدل انهيار الدالة.
     console.error(`[API_ERROR] ${requestId} unexpected:`, (err && err.stack) || err);
     return send(res, 500, {
       error: 'حدث خطأ غير متوقع في الخادم. أعد المحاولة بعد قليل.',
@@ -604,4 +556,4 @@ async function handler(req, res) {
   }
 }
 
-;module.exports handler
+module.exports = handler;
