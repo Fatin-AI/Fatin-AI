@@ -17,18 +17,13 @@ export default async function handler(req, res) {
     });
   }
 
-  // البحث عن المفتاح في كل الأسماء المحتملة التي قد تكون وضعتها في Vercel
-  const apiKey = process.env.GROQ_API_KEY || 
-                 process.env.GEMINI_API_KEY || 
-                 process.env.gemini_api_key || 
-                 process.env.GROQ_KEY ||
-                 process.env.API_KEY;
+  const apiKey = process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
-    console.error("[CRITICAL_ERROR] No API key environment variable found in Vercel.");
+    console.error("[CRITICAL_ERROR] API key is missing");
     return res.status(500).json({
       success: false,
-      error: "مفتاح الـ API غير معرّف في Vercel. يرجى التاكد من إضافة GROQ_API_KEY في إعدادات البيئة."
+      error: "مفتاح الـ API غير معرّف في Vercel."
     });
   }
 
@@ -44,8 +39,8 @@ export default async function handler(req, res) {
 
     const cleanContractText = contractText.trim();
 
-    const systemPrompt = `أنت مساعد قانوني سعودي خبير ومحترف في مراجعة عقود العمل وفقاً لـ نظام العمل السعودي ولائحته التنفيذية.
-قم بتحليل نص العقد المرفق واستخراج المخاطر والبنود المخالفة.
+    const systemPrompt = `أنت مساعد قانوني سعودي خبير ومحترف في مراجعة عقود العمل وفقاً لـ نظام العمل السعودي ولائحته التنفيذية الصادرة عن وزارة الموارد البشرية والتنمية الاجتماعية.
+قم بتحليل نص العقد المرفق واستخراج المخاطر والبنود المخالفة بدقة تامة.
 
 قواعد التحليل الإلزامية:
 1. لا تخترع أرقام مواد أو نصوصًا نظامية غير دقيقة.
@@ -56,46 +51,72 @@ export default async function handler(req, res) {
 البنية المطلوبة:
 {
   "status": "نظامي أو غير نظامي أو يحتاج مراجعة",
-  "summary": "ملخص تحليلي لمدى نظامية العقد",
+  "summary": "ملخص تحليلي لمدى نظامية العقد وفق الأنظمة السعودية",
   "violations": [
     {
       "item": "اسم البند",
-      "article": "المادة النظامية المرتبطة",
+      "article": "المادة النظامية المرتبطة أو تحتاج تحقق",
       "issue": "شرح المشكلة القانونية",
       "suggestedClause": "الصياغة البديلة المقترحة"
     }
   ]
 }`;
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey.trim()}`
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `نص العقد المراد فحصه:\n"""\n${cleanContractText}\n"""` }
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.1
-      })
-    });
+    // قائمة النماذج المتاحة في Groq مرتبة حسب الأولوية لضمان عمل المفتاح بأي حال
+    const modelsToTry = [
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile",
+      "openai/gpt-oss-20b"
+    ];
 
-    const data = await response.json();
+    let lastErrorDetails = null;
+    let rawContent = null;
 
-    if (!response.ok) {
-      console.error("[API_ERROR]", response.status, JSON.stringify(data));
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey.trim()}`
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: `نص العقد المراد فحصه وفق نظام العمل السعودي:\n"""\n${cleanContractText}\n"""` }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.1
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.warn(`Model ${model} returned error:`, response.status, data);
+          lastErrorDetails = data?.error?.message || `HTTP ${response.status}`;
+          continue; // تجربة النموذج التالي
+        }
+
+        rawContent = data?.choices?.[0]?.message?.content;
+        if (rawContent && rawContent.trim() !== "") {
+          break; // تم جلب النتيجة بنجاح من النموذج الحالي
+        }
+      } catch (err) {
+        console.warn(`Error trying model ${model}:`, err.message);
+        lastErrorDetails = err.message;
+      }
+    }
+
+    if (!rawContent) {
       return res.status(502).json({
         success: false,
-        error: "خطأ في الاتصال بمزود الخدمة Groq.",
-        details: data?.error?.message || `HTTP ${response.status}`
+        error: "تعذر إكمال التحليل عبر نماذج Groq المتاحة.",
+        details: lastErrorDetails || "جميع النماذج تعذرت استجابتها."
       });
     }
 
-    const rawContent = data?.choices?.[0]?.message?.content;
     const cleanedJsonString = rawContent
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -107,22 +128,22 @@ export default async function handler(req, res) {
     const sanitizedViolations = (parsedResult.violations || []).map((item) => ({
       item: String(item?.item || "بند تعاقدي"),
       article: String(item?.article || "تحتاج المادة إلى التحقق النظامي"),
-      issue: String(item?.issue || "ملاحظة تتطلب التدقيق"),
-      suggestedClause: String(item?.suggestedClause || "صياغة بديلة مقترحة")
+      issue: String(item?.issue || "ملاحظة تتطلب التدقيق القانوني"),
+      suggestedClause: String(item?.suggestedClause || "صياغة بديلة مقترحة متوافقة مع نظام العمل")
     }));
 
     return res.status(200).json({
       success: true,
       status: parsedResult.status || "يحتاج مراجعة",
-      summary: parsedResult.summary || "تم فحص العقد.",
+      summary: parsedResult.summary || "تم فحص العقد وتدقيقه بنجاح.",
       violations: sanitizedViolations
     });
 
-  } catch (error) {
+  } catкус (error) {
     console.error("[INTERNAL_ERROR]:", error?.message || error);
     return res.status(500).json({
       success: false,
-      error: "حدث خطأ داخلي أثناء معالجة العقد."
+      error: "حدث خطأ داخلي أثناء معالجة وفحص العقد."
     });
   }
 }
