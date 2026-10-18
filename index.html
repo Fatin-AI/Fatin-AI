@@ -174,4 +174,473 @@ textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,175,55,.12
 .empty-state{text-align:center;padding:18px;border-radius:12px;color:var(--green);background:rgba(34,197,94,.06);line-height:1.9;font-size:13px}
 
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
-.legal-disclaimer{color:var(--muted);font-size:12px;line-height:1.9;margin-
+.legal-disclaimer{color:var(--muted);font-size:12px;line-height:1.9;margin-top:22px;padding-top:15px;border-top:1px solid var(--line)}
+footer{text-align:center;color:#7e8797;font-size:12px;margin-top:25px;line-height:1.9}
+
+@media (max-width:600px){
+  .card{padding:19px;border-radius:18px}
+  .pill{display:none}
+  .result-top{justify-content:center;text-align:center}
+  .stats{justify-content:center}
+}
+@media print{
+  body{background:#fff;color:#000;padding:0}
+  .topbar,.hero,#inputCard,.actions,footer{display:none!important}
+  .card{background:#fff;border:0;box-shadow:none;padding:0}
+  .issue,.info,.list li,.summary{background:#fff;border-color:#ccc;color:#000}
+  .fix,.quote{color:#000;background:#f5f5f5}
+  .field-label,.info small{color:#7a5c00}
+}
+</style>
+</head>
+<body>
+<main class="container">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo-icon">ف</div>
+      <div><h1>فطن AI</h1><small>المدقق القانوني الذكي</small></div>
+    </div>
+    <span class="pill">⚖️ وفق نظام العمل السعودي</span>
+  </div>
+
+  <section class="hero">
+    <h2>افحص عقد عملك قبل أن <span>توقّعه</span></h2>
+    <p>ارفع عقدك أو الصق نصه، وسيحدد لك فطن البنود المخالفة أو المجحفة أو الناقصة،<br>مع صياغات مقترحة جاهزة للتفاوض.</p>
+    <div class="features">
+      <span class="feature">🔍 كشف البنود المخالفة</span>
+      <span class="feature">📋 البنود الناقصة</span>
+      <span class="feature">✍️ صياغات مقترحة</span>
+      <span class="feature">🔒 لا يُخزَّن نص العقد</span>
+    </div>
+  </section>
+
+  <section class="card" id="inputCard">
+    <h2 class="section-title"><span class="step">1</span> أدخل العقد</h2>
+
+    <div id="dropzone" class="dropzone" role="button" tabindex="0" aria-label="اختيار ملف العقد">
+      <div class="ico">📄</div>
+      <strong>اضغط لاختيار ملف العقد أو اسحبه إلى هنا</strong>
+      <p>يدعم PDF و TXT — يفضّل ألا يتجاوز 15 ميجابايت</p>
+      <input type="file" id="contractFile" accept=".pdf,.txt,application/pdf,text/plain">
+    </div>
+    <div id="fileInfo" class="file-info">
+      <span id="fileName"></span>
+      <button type="button" id="removeFileBtn">إزالة الملف</button>
+    </div>
+    <div id="fileNotice" class="notice" role="status" aria-live="polite"></div>
+
+    <div class="divider">أو أدخل نص العقد يدويًا</div>
+
+    <label for="contractInput">نص العقد</label>
+    <textarea id="contractInput" placeholder="الصق نص عقد العمل هنا، أو ارفع ملف PDF أعلاه..."></textarea>
+    <div class="meta-row">
+      <p class="help">يمكنك مراجعة النص المستخرج قبل التحليل. ملفات PDF الممسوحة ضوئيًا (صور) تحتاج OCR.</p>
+      <span id="counter" class="counter">0 / 30,000</span>
+    </div>
+
+    <button type="button" id="analyzeBtn" class="btn">بدء الفحص القانوني</button>
+
+    <div id="progressWrap" class="progress-wrap" aria-live="polite">
+      <p id="progressMessage" class="progress-message">جارٍ إرسال العقد إلى محرك التحليل...</p>
+      <div class="progress-track"><div class="progress-bar"></div></div>
+    </div>
+    <div id="errorNotice" class="notice" role="alert"></div>
+  </section>
+
+  <section id="resultContainer" class="card" aria-live="polite">
+    <div class="result-top">
+      <div class="ring" id="ring">
+        <svg viewBox="0 0 120 120">
+          <circle class="bg" cx="60" cy="60" r="52" fill="none" stroke-width="10"></circle>
+          <circle class="fg" id="ringFg" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round"
+                  stroke-dasharray="326.73" stroke-dashoffset="326.73"></circle>
+        </svg>
+        <div class="num"><b id="scoreNum">--</b><span>درجة التوافق</span></div>
+      </div>
+      <div class="result-head">
+        <h2>نتيجة المراجعة القانونية</h2>
+        <span id="riskBadge" class="risk unknown">مستوى الخطورة: غير محدد</span>
+        <div class="stats" id="stats"></div>
+      </div>
+    </div>
+
+    <div id="summaryText" class="summary"></div>
+
+    <div class="block" id="infoBlock"><h3>🗂️ بيانات العقد الأساسية</h3><div class="info-grid" id="infoGrid"></div></div>
+    <div class="block"><h3>🚩 الملاحظات والمخاطر <span class="count" id="issuesCount"></span></h3><div id="issuesList"></div></div>
+    <div class="block" id="missingBlock"><h3>⚠️ بنود مهمة غير موجودة</h3><ul class="list missing" id="missingList"></ul></div>
+    <div class="block" id="goodBlock"><h3>✅ نقاط إيجابية</h3><ul class="list good" id="goodList"></ul></div>
+    <div class="block" id="recBlock"><h3>💡 توصيات قبل التوقيع</h3><ul class="list rec" id="recList"></ul></div>
+
+    <div class="actions">
+      <button type="button" class="ghost" id="copyBtn">📋 نسخ التقرير</button>
+      <button type="button" class="ghost" id="printBtn">🖨️ طباعة / حفظ PDF</button>
+      <button type="button" class="ghost" id="newBtn">🔄 فحص عقد جديد</button>
+    </div>
+
+    <div class="legal-disclaimer" id="disclaimer"></div>
+  </section>
+
+  <footer>
+    فطن AI — مساعد ذكي لمراجعة عقود العمل<br>
+    تتم معالجة العقد عبر الخادم المتصل بخدمة الذكاء الاصطناعي عند بدء الفحص، ولا يُحفظ نصه.
+  </footer>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  const MAX_CHARS = 30000;
+  const $ = (id) => document.getElementById(id);
+
+  const fileInput = $("contractFile"), dropzone = $("dropzone"), contractInput = $("contractInput");
+  const analyzeBtn = $("analyzeBtn"), fileInfo = $("fileInfo"), fileName = $("fileName");
+  const fileNotice = $("fileNotice"), errorNotice = $("errorNotice");
+  const progressWrap = $("progressWrap"), progressMessage = $("progressMessage");
+  const resultContainer = $("resultContainer"), counter = $("counter");
+  let lastReport = "";
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  /* ---------- أدوات ---------- */
+  function showNotice(el, msg, type) { el.textContent = msg; el.className = "notice " + type; }
+  function clearNotice(el) { el.textContent = ""; el.className = "notice"; }
+  function formatBytes(b) {
+    if (b < 1024) return b + " بايت";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " كيلوبايت";
+    return (b / 1048576).toFixed(2) + " ميجابايت";
+  }
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined && text !== null) e.textContent = text;
+    return e;
+  }
+  function str(v) {
+    if (v === null || v === undefined) return "";
+    return typeof v === "string" ? v.trim() : String(v);
+  }
+  function isMissing(v) {
+    const s = str(v);
+    return !s || s === "غير مذكور";
+  }
+
+  function updateCounter() {
+    const n = contractInput.value.length;
+    counter.textContent = n.toLocaleString("en-US") + " / " + MAX_CHARS.toLocaleString("en-US");
+    counter.className = "counter" + (n > MAX_CHARS ? " over" : n > MAX_CHARS * 0.9 ? " warn" : "");
+  }
+  contractInput.addEventListener("input", updateCounter);
+
+  /* ---------- الملفات ---------- */
+  function resetSelectedFile() {
+    fileInput.value = ""; fileInfo.style.display = "none"; fileName.textContent = ""; clearNotice(fileNotice);
+  }
+  function readTextFile(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || ""));
+      r.onerror = () => reject(new Error("تعذرت قراءة الملف النصي."));
+      r.readAsText(file, "UTF-8");
+    });
+  }
+  async function readPdfFile(file) {
+    if (!window.pdfjsLib) throw new Error("تعذر تحميل مكتبة قراءة PDF. تحقق من اتصال الإنترنت.");
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    const pages = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      progressMessage.textContent = "جارٍ استخراج النص من صفحة " + i + " من " + pdf.numPages + "...";
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      pages.push(content.items.filter(it => typeof it.str === "string").map(it => it.str).join(" "));
+    }
+    return pages.join("\n\n");
+  }
+  async function handleFile(file) {
+    if (!file) return;
+    clearNotice(fileNotice); clearNotice(errorNotice);
+    const name = file.name.toLowerCase();
+    const isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
+    const isTxt = file.type === "text/plain" || name.endsWith(".txt");
+    if (!isPdf && !isTxt) return showNotice(fileNotice, "صيغة الملف غير مدعومة. اختر PDF أو TXT.", "error");
+    if (file.size > 15 * 1048576) return showNotice(fileNotice, "حجم الملف يتجاوز 15 ميجابايت.", "error");
+
+    fileName.textContent = file.name + " — " + formatBytes(file.size);
+    fileInfo.style.display = "block";
+    analyzeBtn.disabled = true; analyzeBtn.textContent = "جارٍ قراءة الملف...";
+    progressWrap.style.display = "block"; progressMessage.textContent = "جارٍ استخراج النص من الملف...";
+    try {
+      const text = isPdf ? await readPdfFile(file) : await readTextFile(file);
+      contractInput.value = text; updateCounter();
+      if (!text.trim()) {
+        showNotice(fileNotice, "لم يتم العثور على نص قابل للاستخراج. قد يكون الملف صورًا ممسوحة وتحتاج إلى OCR.", "error");
+      } else if (text.length > MAX_CHARS) {
+        showNotice(fileNotice, "تم استخراج النص لكنه أطول من الحد المسموح (" + MAX_CHARS.toLocaleString("en-US") + " حرف). قصّره أو افحصه على أجزاء.", "error");
+      } else {
+        showNotice(fileNotice, "تم استخراج النص بنجاح. راجعه قبل بدء الفحص.", "success");
+      }
+    } catch (e) {
+      showNotice(fileNotice, e.message || "حدث خطأ أثناء قراءة الملف.", "error");
+    } finally {
+      analyzeBtn.disabled = false; analyzeBtn.textContent = "بدء الفحص القانوني";
+      progressWrap.style.display = "none";
+    }
+  }
+  dropzone.addEventListener("click", () => fileInput.click());
+  dropzone.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); } });
+  fileInput.addEventListener("change", e => handleFile(e.target.files[0]));
+  ["dragenter", "dragover"].forEach(n => dropzone.addEventListener(n, e => { e.preventDefault(); dropzone.classList.add("dragover"); }));
+  ["dragleave", "drop"].forEach(n => dropzone.addEventListener(n, e => { e.preventDefault(); dropzone.classList.remove("dragover"); }));
+  dropzone.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+  $("removeFileBtn").addEventListener("click", () => { resetSelectedFile(); contractInput.value = ""; updateCounter(); });
+
+  /* ---------- تطبيع النتيجة (يدعم الشكل الجديد والقديم) ---------- */
+  const RISK_LABELS = { low: "منخفضة", medium: "متوسطة", high: "مرتفعة", unknown: "غير محدد" };
+  const SEV_LABELS = { high: "خطورة عالية", medium: "خطورة متوسطة", low: "خطورة منخفضة" };
+  const SEV_ORDER = { high: 0, medium: 1, low: 2 };
+  const INFO_LABELS = [
+    ["contract_type", "نوع العقد"], ["job_title", "المسمى الوظيفي"], ["salary", "الأجر"],
+    ["probation", "فترة التجربة"], ["working_hours", "ساعات العمل"], ["annual_leave", "الإجازة السنوية"],
+    ["notice_period", "مدة الإشعار"], ["end_of_service", "مكافأة نهاية الخدمة"]
+  ];
+
+  function toList(v) {
+    return Array.isArray(v) ? v.map(str).filter(Boolean) : [];
+  }
+  function normalize(data) {
+    let issues = Array.isArray(data.issues) ? data.issues : (Array.isArray(data.violations) ? data.violations : null);
+    if (typeof data.summary !== "string" || !issues) return null;
+
+    issues = issues.filter(i => i && typeof i === "object").map(i => ({
+      title: str(i.title || i.item) || "ملاحظة قانونية",
+      severity: ["high", "medium", "low"].includes(i.severity) ? i.severity : "medium",
+      clause: str(i.clause),
+      problem: str(i.problem || i.issue),
+      legal_basis: str(i.legal_basis || i.article),
+      recommendation: str(i.recommendation || i.suggestedClause)
+    }));
+    issues.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]);
+
+    let risk = ["low", "medium", "high", "unknown"].includes(data.overall_risk) ? data.overall_risk : null;
+    if (!risk && data.status) risk = data.status === "نظامي" ? "low" : data.status === "غير نظامي" ? "high" : "medium";
+    if (!risk) risk = "unknown";
+
+    const score = Number.isFinite(Number(data.score)) && data.score !== null ? Math.max(0, Math.min(100, Math.round(Number(data.score)))) : null;
+
+    return {
+      summary: str(data.summary),
+      risk, score, issues,
+      info: data.contract_info && typeof data.contract_info === "object" ? data.contract_info : {},
+      missing: toList(data.missing_clauses),
+      good: toList(data.positive_points),
+      recs: toList(data.recommendations),
+      disclaimer: str(data.disclaimer)
+    };
+  }
+
+  /* ---------- العرض ---------- */
+  function scoreColor(s) {
+    if (s === null) return "var(--gray)";
+    return s >= 75 ? "var(--green)" : s >= 50 ? "var(--amber)" : "var(--red)";
+  }
+  function fillList(blockId, listId, items) {
+    const block = $(blockId), ul = $(listId);
+    ul.replaceChildren();
+    if (!items.length) { block.style.display = "none"; return; }
+    block.style.display = "block";
+    items.forEach(t => ul.appendChild(el("li", "", t)));
+  }
+  function addField(parent, label, value, cls) {
+    if (!value) return;
+    const w = el("div", "field");
+    w.appendChild(el("span", "field-label", label));
+    w.appendChild(el("div", cls || "", value));
+    parent.appendChild(w);
+  }
+
+  function render(r) {
+    // الدائرة
+    const circ = 2 * Math.PI * 52;
+    const fg = $("ringFg");
+    fg.style.stroke = scoreColor(r.score);
+    fg.setAttribute("stroke-dasharray", circ.toFixed(2));
+    fg.setAttribute("stroke-dashoffset", circ.toFixed(2));
+    $("scoreNum").textContent = r.score === null ? "--" : r.score;
+    $("scoreNum").style.color = scoreColor(r.score);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      fg.setAttribute("stroke-dashoffset", (circ * (1 - (r.score || 0) / 100)).toFixed(2));
+    }));
+
+    // الخطورة والإحصاءات
+    const badge = $("riskBadge");
+    badge.className = "risk " + r.risk;
+    badge.textContent = "مستوى الخطورة: " + RISK_LABELS[r.risk];
+    const stats = $("stats"); stats.replaceChildren();
+    const cnt = s => r.issues.filter(i => i.severity === s).length;
+    stats.appendChild(el("span", "stat", "🔴 عالية: " + cnt("high")));
+    stats.appendChild(el("span", "stat", "🟠 متوسطة: " + cnt("medium")));
+    stats.appendChild(el("span", "stat", "🔵 منخفضة: " + cnt("low")));
+
+    $("summaryText").textContent = r.summary || "لم يتم إرجاع ملخص للعقد.";
+
+    // بيانات العقد
+    const grid = $("infoGrid"); grid.replaceChildren();
+    let shown = 0;
+    INFO_LABELS.forEach(([k, label]) => {
+      const v = str(r.info[k]);
+      if (!v) return;
+      const box = el("div", "info");
+      box.appendChild(el("small", "", label));
+      box.appendChild(el("div", "", v));
+      grid.appendChild(box); shown++;
+    });
+    $("infoBlock").style.display = shown ? "block" : "none";
+
+    // الملاحظات
+    const list = $("issuesList"); list.replaceChildren();
+    $("issuesCount").textContent = r.issues.length ? "(" + r.issues.length + ")" : "";
+    if (!r.issues.length) {
+      list.appendChild(el("div", "empty-state",
+        r.risk === "unknown"
+          ? "لم يتمكن المحرك من تقييم النص. تأكد أنه عقد عمل كامل."
+          : "لم يرصد المحرك مخالفات صريحة في الفحص الحالي. هذا لا يعني ضمان سلامة جميع بنود العقد."));
+    } else {
+      r.issues.forEach((it, idx) => {
+        const card = el("article", "issue " + it.severity);
+        const head = el("div", "issue-head");
+        head.appendChild(el("h4", "", (idx + 1) + ". " + it.title));
+        head.appendChild(el("span", "sev " + it.severity, SEV_LABELS[it.severity]));
+        card.appendChild(head);
+        addField(card, "البند في العقد", it.clause, "quote");
+        addField(card, "شرح المشكلة والمخاطر", it.problem);
+        addField(card, "الأساس النظامي", it.legal_basis);
+        addField(card, "التعديل أو الصياغة المقترحة", it.recommendation, "fix");
+        list.appendChild(card);
+      });
+    }
+
+    fillList("missingBlock", "missingList", r.missing);
+    fillList("goodBlock", "goodList", r.good);
+    fillList("recBlock", "recList", r.recs);
+
+    $("disclaimer").textContent =
+      "تنبيه: " + (r.disclaimer || "هذا التحليل استرشادي ولا يغني عن استشارة محامٍ أو مختص.") +
+      " فطن AI أداة مساعدة ولا تمثل نتائجها فتوى أو اعتمادًا نظاميًا نهائيًا؛ تحقق من النصوص النظامية السارية قبل اتخاذ أي قرار.";
+
+    lastReport = buildReport(r);
+    resultContainer.style.display = "block";
+    resultContainer.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function buildReport(r) {
+    const L = [];
+    L.push("تقرير فطن AI — مراجعة عقد العمل");
+    L.push("مستوى الخطورة: " + RISK_LABELS[r.risk] + (r.score !== null ? " | درجة التوافق: " + r.score + "/100" : ""));
+    L.push("", "الملخص:", r.summary);
+    const info = INFO_LABELS.filter(([k]) => str(r.info[k])).map(([k, l]) => "- " + l + ": " + str(r.info[k]));
+    if (info.length) L.push("", "بيانات العقد:", ...info);
+    if (r.issues.length) {
+      L.push("", "الملاحظات:");
+      r.issues.forEach((i, n) => {
+        L.push((n + 1) + ". [" + SEV_LABELS[i.severity] + "] " + i.title);
+        if (i.clause) L.push("   البند: " + i.clause);
+        if (i.problem) L.push("   المشكلة: " + i.problem);
+        if (i.legal_basis) L.push("   الأساس النظامي: " + i.legal_basis);
+        if (i.recommendation) L.push("   المقترح: " + i.recommendation);
+      });
+    }
+    if (r.missing.length) L.push("", "بنود ناقصة:", ...r.missing.map(x => "- " + x));
+    if (r.good.length) L.push("", "نقاط إيجابية:", ...r.good.map(x => "- " + x));
+    if (r.recs.length) L.push("", "توصيات:", ...r.recs.map(x => "- " + x));
+    L.push("", "تنبيه: هذا التحليل استرشادي ولا يغني عن استشارة محامٍ أو مختص.");
+    return L.join("\n");
+  }
+
+  /* ---------- الطلب ---------- */
+  async function analyzeContract() {
+    const text = contractInput.value.trim();
+    clearNotice(errorNotice); clearNotice(fileNotice);
+
+    if (!text) return showNotice(errorNotice, "يرجى رفع عقد أو لصق نص العقد قبل بدء الفحص.", "error");
+    if (text.length < 40) return showNotice(errorNotice, "النص قصير جدًا. الصق نص العقد كاملًا.", "error");
+    if (text.length > MAX_CHARS) {
+      return showNotice(errorNotice, "النص طويل (" + text.length.toLocaleString("en-US") + " حرف). الحد الأقصى " + MAX_CHARS.toLocaleString("en-US") + " حرف، قسّم العقد إلى أجزاء.", "error");
+    }
+
+    analyzeBtn.disabled = true; analyzeBtn.textContent = "جارٍ تحليل العقد...";
+    progressWrap.style.display = "block";
+    progressMessage.textContent = "جارٍ إرسال العقد إلى محرك الذكاء الاصطناعي... قد يستغرق الفحص حتى دقيقة.";
+    resultContainer.style.display = "none";
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 75000);
+      let response;
+      try {
+        response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contractText: text }),
+          signal: controller.signal
+        });
+      } finally { clearTimeout(timer); }
+
+      const raw = await response.text();
+      let data;
+      try { data = JSON.parse(raw); }
+      catch {
+        throw new Error(response.status === 404
+          ? "لم يتم العثور على API التحليل. تأكد من وجود الملف api/analyze.js وإعادة النشر."
+          : "استجابة الخادم ليست JSON صالحًا (رمز " + response.status + "). تحقق من سجلات Vercel.");
+      }
+      if (!response.ok) throw new Error(data.error || "فشل التحليل. رمز الاستجابة: " + response.status);
+      if (data.error) throw new Error(data.error);
+
+      const result = normalize(data);
+      if (!result) throw new Error("أعاد الخادم نتيجة لا تطابق البنية المتوقعة.");
+      render(result);
+    } catch (error) {
+      let msg = error.message || "حدث خطأ غير معروف.";
+      if (error.name === "AbortError") msg = "انتهت مهلة انتظار التحليل. حاول مجددًا أو قصّر النص.";
+      else if (error instanceof TypeError && !navigator.onLine) msg = "تحقق من اتصال الإنترنت ثم حاول مجددًا.";
+      showNotice(errorNotice, "تعذر إكمال الفحص: " + msg, "error");
+    } finally {
+      analyzeBtn.disabled = false; analyzeBtn.textContent = "بدء الفحص القانوني";
+      progressWrap.style.display = "none";
+    }
+  }
+
+  analyzeBtn.addEventListener("click", analyzeContract);
+
+  /* ---------- الأزرار ---------- */
+  $("printBtn").addEventListener("click", () => window.print());
+  $("newBtn").addEventListener("click", () => {
+    resultContainer.style.display = "none";
+    resetSelectedFile(); contractInput.value = ""; updateCounter();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  $("copyBtn").addEventListener("click", async () => {
+    const btn = $("copyBtn"), old = btn.textContent;
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(lastReport);
+      else {
+        const ta = document.createElement("textarea");
+        ta.value = lastReport; document.body.appendChild(ta); ta.select();
+        document.execCommand("copy"); ta.remove();
+      }
+      btn.textContent = "✅ تم النسخ";
+    } catch { btn.textContent = "تعذر النسخ"; }
+    setTimeout(() => { btn.textContent = old; }, 2000);
+  });
+
+  updateCounter();
+})();
+</script>
+</body>
+</html>
